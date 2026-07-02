@@ -11,6 +11,20 @@
 
 PDF обеих статей лежат в `docs/` (если папки нет — попросить пользователя добавить). При реализации формул сверяться с разделом IV статьи Ochs и главами 3–4 диссертации О'Коннора.
 
+**Как читать PDF в этой рабочей среде:** встроенный рендер PDF-страниц (`pdftoppm`/poppler-utils) не установлен и недоступен через обычные пакетные менеджеры в этой песочнице. Рабочий обходной путь — Python + PyMuPDF:
+
+```bash
+python -m pip install --quiet pymupdf
+python - <<'EOF'
+import fitz
+doc = fitz.open(r"...\docs\Simulation_of_the_Dynamics_of_Nonplayer_Characters.pdf")
+page = doc[8]                       # индекс с 0; номер на странице статьи обычно index+282 (см. footer)
+page.get_pixmap(dpi=300).save(r"...\page.png")   # можно передать clip=fitz.Rect(...) для кропа конкретного рисунка
+EOF
+```
+
+Полученный PNG читать через инструмент Read как обычное изображение. Проверено на практике 2026-07-02 — так были прочитаны рис. 2-6 и раздел IV статьи Ochs и найдены реальные расхождения с более ранним пересказом (см. историю формул ниже). Используй `python -c "import fitz"` для проверки, установлен ли уже пакет, прежде чем ставить заново.
+
 ## Структура solution (принятые решения)
 
 | Проект | Тип | Платформа | Назначение |
@@ -90,30 +104,32 @@ RelationshipCore.Simulation               — оркестратор (Этап 3
 
 `DeepGraph.FindEdge` ищет ровно одно ребро на пару `(from, to)` у владельца. К Этапу 5 понадобятся одновременно `SocialRelation`-ребро и структурное `MEMBER`-ребро между теми же двумя узлами — они будут конфликтовать за один слот. Решать добавлением типа отношения в ключ поиска внутри `DeepGraph`; интерфейсы (`IEdge`/`IRelationship`) менять не потребуется.
 
-## Модель Ochs — что реализовать (справка по статье)
+## Модель Ochs — что реализовать (сверено с оригиналом PDF, 2026-07-02, рис. 2-6 и раздел IV прочитаны напрямую — см. «Как читать PDF» выше)
 
 - **Событие**: кортеж `⟨agent, action, patient, dc⟩`, где `dc ∈ [0,1]` — степень уверенности (1 — очевидец, 0 — ожидаемое не произошло).
 - **Словарь игры**: действия с объективным `effect ∈ [-1,1]`; субъективные `attitude(x, объект/персонаж) ∈ [-1,1]` и `praise(x, действие) ∈ [-1,1]` для каждого NPC.
 - **10 эмоций** (упрощение OCC по Ortony 2002): joy/distress, hope/fear, relief/disappointment, pride/shame, admiration/anger. Вектор значений `[0,1]`.
-- **Правила триггера** (рис. 2 статьи): желательность события = знак effect × знак attitude к пациенту; dc=1 → joy/distress, dc∈(0,1) → hope/fear, dc=0 → relief/disappointment; praise + кто агент → pride/admiration/shame/anger.
-- **Интенсивность стимула** (раздел IV-A): среднее `av(|attitude(i,patient)|, |effect_action|)`; для hope/fear — умножить на dc; для pride/admiration/shame/anger — `|praise(i,action)|`.
-- **Личность**: пара `(extraversion, neuroticism) ∈ [-1,1]²`. Экстраверсия усиливает joy/hope/pride/relief, нейротизм — distress/fear/shame/disappointment. Мультипликативный фактор: нейтральная личность = стимул без изменений, максимальная черта ≈ +50%.
-- **Затухание**: `e(t) = e(t-1) * exp(-decayRate)`; в статье decayRate = 0.1 для всех эмоций. При событии: `e(t) = max(триггер, затухшее старое)`.
-- **Социальное отношение**: кортеж `⟨liking, dominance, familiarity, solidarity⟩`, несимметричное (отношение i→j ≠ j→i). Начальные значения — из пар социальных ролей (cop/gangster и т.п.).
-- **Динамика отношений от эмоций** (рис. 4–6): позитивная эмоция, вызванная j → liking↑; негативная → liking↓; pride/anger от j → dominance↑, fear/distress/admiration/shame → dominance↓; выражение страха собеседником → своя dominance↑; негативная эмоция от j → solidarity↓, совпадение выражаемых эмоций → solidarity↑; familiarity растёт косвенно через liking. Функция обновления `g_sr` — пологая у краёв ±1 (отношения на экстремумах трудно менять), например синусоида.
-- **Пороги**: порог активации (эмоция ниже — не влияет на поведение) и порог насыщения (выше — отключает рациональное принятие решений).
-
-### ⚠ Допущения при переводе рис. 4-6 в код (нужна сверка с оригиналом статьи)
-
-В этой рабочей среде не установлен `pdftoppm` (poppler-utils), поэтому PDF статьи прочитать не удалось — реализация `SocialRelationRules` (Этап 2) опирается ИСКЛЮЧИТЕЛЬНО на сжатый пересказ выше, а не на сами рис. 4-6. Текст пересказа неоднозначен в одном месте, и я принял конкретную интерпретацию — **при первой возможности открыть PDF (например, `poppler-utils` появится в среде, или у пользователя есть читалка) сверить и поправить**:
-
-- Пересказ говорит одновременно «pride/anger от j → dominance↑, fear/distress/admiration/shame → dominance↓» и «выражение страха собеседником → своя dominance↑» — на первый взгляд противоречие (fear в обоих списках, но с разным знаком). Разрешил так: это ДВА разных ребра/источника:
-  - `SocialRelationRules.UpdateFromOwnEmotion(current, ownEmotion)` — **я сам** испытал эмоцию (вызванную действием собеседника) → обновляется **моё** ребро я→собеседник: pride/anger (свои) поднимают мою dominance, fear/distress/admiration/shame (свои) её опускают. Подтверждается сценарием: «Рассказ о похищении → distress... dominance грабителя падает» — это его собственный distress роняет его dominance.
-  - `SocialRelationRules.UpdateFromObservedExpression(current, expresserEmotion)` — я **наблюдаю** выражение эмоции у собеседника → моя dominance меняется комплементарно (если собеседник выглядит подчинённым/испуганным — я ощущаю себя более доминантным). Это прямая реализация фразы «выражение страха собеседником → своя dominance растёт».
-  - Обе функции чистые и независимые; `SocialDynamicsEngine` (Этап 3) должен вызывать обе (для пары наблюдатель/собеседник) при обработке одного взаимодействия — иначе dominance будет обновляться только с одной стороны.
-- Функция `g_sr` (пологая у краёв ±1) реализована как `SocialRelationRules.ApplyBounded`: `new = current + delta * cos(current * π/2)`, клэмп в `[-1,1]`. Статья не даёт точную формулу — в пересказе только качественное описание «например синусоида»; косинус — интерпретация, дающая нужное свойство (множитель 1 в центре, 0 на краях), но конкретный вид функции не проверен против статьи.
-- Familiarity не имеет отдельного триггера в пересказе («растёт косвенно через liking») — реализовано как `UpdateFamiliarityFromLikingShift(before, after)`: растёт на `|Δliking| * gain` независимо от знака изменения liking. Тоже интерпретация, не прямая цитата формулы.
-- Коэффициент `DefaultGain = 0.3f` в `SocialRelationRules` — не из статьи, произвольная константа, чтобы обновления давали заметный, но не мгновенно насыщающий эффект. Может потребовать калибровки на Этапе 4 (эталонные сценарии) для совпадения качественной динамики с рис. 9-11.
+- **Правила триггера** (рис. 2 статьи, `RelationshipCore.Dynamics.Rules.EmotionRules`):
+  - Верхняя ветка (`effect ≥ 0 И attitude(i,patient) > 0`) ИЛИ (`effect < 0 И attitude < 0`) — **важно: `effect ≥ 0`, не строго `> 0`**, поэтому `effect == 0` при `attitude > 0` всё равно попадает в "положительную" ветку; обычный `MathF.Sign(effect)` тут даст неверный 0 и погасит эмоцию — нужен явный `effect >= 0 ? 1 : -1`. Ветка даёт: `dc=1` → Joy, `dc∈]0,1[` → Hope, `dc=0` → Disappointment.
+  - Нижняя ветка (`effect ≥ 0 И attitude < 0`) ИЛИ (`effect < 0 И attitude > 0`): `dc=1` → Distress, `dc∈]0,1[` → Fear, `dc=0` → Relief.
+  - `attitude == 0` → ни одна ветка не срабатывает (нет эмоции этого типа).
+  - Praise-ветки (`praise(i,action) > 0` → agent=i: Pride, agent≠i: Admiration; `praise(i,action) < 0` → agent=i: Shame, agent≠i: Anger) **помечены `dc=1`** на диаграмме — срабатывают только для очевидца, не при любом dc.
+- **Интенсивность стимула** (раздел IV-A, фиг. 3): для `{joy, distress, relief, disappointment}` — `av(|attitude(i,patient)|, |effect_action|)` (среднее, без множителя dc — в том числе для relief/disappointment, у которых `dc=0`); для `{hope, fear}` — то же самое `* dc`; для `{pride, admiration, shame, anger}` — `|praise(i,action)|`.
+- **Личность** (раздел IV-C): пара `(extraversion, neuroticism) ∈ [-1,1]²`. Текст статьи явно определяет эффект только для `p ∈ [0,1]` (экстраверт усиливает **позитивные** эмоции, нейротик — **негативные**, без указания, какие конкретно 10 эмоций считаются позитивными/негативными для этой цели — не путать со списками из рис. 4!). Мультипликативный фактор: `p=0` → ×1.0, `p=1` → ×1.5 (текст статьи подтверждает именно это). Поведение при `p<0` (интроверт/спокойный) в прочитанной части статьи не уточнено; реализовано симметрично (`p=-1` → ×0.5) как разумное расширение бипоlярной шкалы — это НЕ прямая цитата формулы.
+- **Затухание** (раздел IV-A-3): `e(t) = e(t-1) * exp(-decreaseRate)`; в реализации авторов `decreaseRate = 0.1` для всех эмоций. При событии: `e(t) = max(триггер, затухшее старое)`.
+- **Социальное отношение** (раздел IV-D-1): кортеж `⟨liking, dominance, familiarity, solidarity⟩`, несимметричное (i→j ≠ j→i). **Важно — диапазоны РАЗНЫЕ**: `liking, dominance ∈ [-1,1]`; `familiarity, solidarity ∈ [0,1]` (это прямо в определении квадруплета, легко упустить при беглом чтении). Начальные значения — из пар социальных ролей (cop/gangster и т.п.), таблица усредняется при множественных ролях.
+- **Динамика отношений от эмоций** — три независимых источника, реализованы как `SocialRelationRules.From*`, складывающиеся через `SocialRelationDelta` и применяемые ОДИН раз функцией `Apply` (= статейная `φ_sr = g_sr(relation, f_sr(...))`, не несколько последовательных вызовов g_sr):
+  - **Рис. 4 (liking)**, "emotions of i caused by j" — т.е. СВОЯ эмоция, вызванная действием собеседника: `{joy, hope, admiration, pride}` → `+`; `{distress, fear, anger, shame}` → `-`. **relief и disappointment в этот набор не входят** (легко ошибиться, взяв общий список "позитивных/негативных" эмоций).
+  - **Рис. 5 (dominance)** — ДВА разных источника:
+    - "emotions of i caused by j" (своя эмоция): `{pride, anger}` → `+`; `{fear, distress, admiration, shame}` → `-` (на самой диаграмме shame отсутствует, но текст раздела IV-D-2 явно перечисляет все 4 — доверяем тексту, вероятная опечатка в фигуре).
+    - "emotions expressed by j" (эмоция, которую я НАБЛЮДАЮ у собеседника): **только** `{fear, distress}` → `+` к моей dominance. Никакой связи с pride/anger/admiration здесь нет — это не "комплементарный переворот" первого списка, а отдельное самостоятельное правило.
+  - **Рис. 6 (solidarity)** — тоже три источника:
+    - совпадение выражаемых эмоций `{joy_i&joy_j, hope_i&hope_j, distress_i&distress_j, fear_i&fear_j}` → `+`;
+    - несовпадение (конкретные пары) `{joy_i&distress_j, hope_i&fear_j, distress_i&joy_j, fear_i&hope_j}` → `-`;
+    - своя эмоция, вызванная j: `{distress, fear, disappointment, shame, anger}` → `-` (обратите внимание: это тоже "emotions of i caused by j", как и в рис. 4/5 — НЕ эмоция, которую выражает собеседник).
+  - **Familiarity** — статья прямо говорит "этот механизм не представлен в этой работе"; в коде — собственное расширение (`UpdateFamiliarityFromLikingShift`, растёт с `|Δliking|`), не из статьи.
+  - Функция обновления `g_sr` — статья описывает как монотонно возрастающую, с малым наклоном у 1 и -1 ("отношение трудно изменить на экстремумах"), и **прямо предлагает синусоиду как пример реализации**, не давая точной формулы. Реализовано как `cos`/`sin`-демпфер (`ApplyBoundedSigned`/`ApplyBoundedUnit`) с нижним порогом 0.15, чтобы величины, стартующие ровно с края диапазона (например, `familiarity=0`, `solidarity=0` у новых отношений), не залипали навсегда с нулевым шагом.
+- **Пороги**: порог активации (эмоция ниже — не влияет на поведение) и порог насыщения (выше — отключает рациональное принятие решений). Точных чисел статья не даёт (пример "0.2 для joy" — иллюстративный).
 
 ## Эталонные сценарии для тестов (из статьи Ochs, раздел IV-B)
 
@@ -147,12 +163,13 @@ RelationshipCore.Simulation               — оркестратор (Этап 3
 
 Важный нюанс структуры: `RelationshipCore.Tests` лежит вложенной папкой внутри каталога `RelationshipCore` (а не рядом на уровне решения), поэтому в `RelationshipCore.csproj` пришлось добавить `<Compile Remove="RelationshipCore.Tests/**" />` — иначе SDK-проект по умолчанию глобит файлы тестов в основную сборку.
 
-**Этап 2 реализован** (после архитектурной консультации с Fable 5 — см. раздел «Архитектура объединения слоёв» выше):
+**Этап 2 реализован** (после архитектурной консультации с Fable 5 — см. раздел «Архитектура объединения слоёв» выше), **затем сверен и исправлен по оригинальному PDF статьи Ochs** (2026-07-02, тот же день — см. «Как читать PDF в этой рабочей среде» выше про PyMuPDF-обходной путь):
 
-- `Dynamics/` — `EmotionKind` (enum, 10 эмоций), `EmotionVector` (immutable, array-backed `readonly struct`, индексатор + `With`, клэмп `[0,1]`), `EmotionThresholds`, `Personality` (`readonly struct`, клэмп `[-1,1]²`), `ActionId`, `GameEvent`, `ActionDictionary` (объективный effect), `Appraisal` (субъективные attitude/praise одного NPC), `SocialRelation` (`IRelationship`, immutable, клэмп `[-1,1]`, `Matches` с эпсилон-допуском), `FloatRange`, `SocialRelationPattern` (запрос-паттерн для `Matches`).
-- `Dynamics/Rules/` — `EmotionRules.ComputeStimulus` (триггер рис. 2 + интенсивность IV-A), `PersonalityRules.Modulate`, `DecayRules.Decay`/`Merge`, `EmotionValence` (internal, классификация эмоций по знаку/влиянию на доминантность), `SocialRelationRules` (`UpdateFromOwnEmotion`, `UpdateFromObservedExpression`, `UpdateSolidarityFromCoincidence`, `UpdateFamiliarityFromLikingShift`, `ApplyBounded` — internal, см. `AssemblyInfo.cs` → `InternalsVisibleTo("RelationshipCore.Tests")`).
-- 52 юнит-теста в `RelationshipCore.Tests/Dynamics/` — все проходят (`dotnet test`), проверяют формулы изолированно (без графа), включая клэмпинг, направления изменений и конкретные числа из раздела IV-A.
-- **Важно:** формулы `SocialRelationRules` реализованы по пересказу статьи в CLAUDE.md, а не по самому PDF (в этой среде не читается — нет `pdftoppm`). Принятые интерпретационные решения задокументированы в блоке «⚠ Допущения при переводе рис. 4-6 в код» выше — при первой возможности свериться с оригинальными рис. 4-6 и поправить при расхождениях.
+- `Dynamics/` — `EmotionKind` (enum, 10 эмоций), `EmotionVector` (immutable, array-backed `readonly struct`, индексатор + `With`, клэмп `[0,1]`), `EmotionThresholds`, `Personality` (`readonly struct`, клэмп `[-1,1]²`), `ActionId`, `GameEvent`, `ActionDictionary` (объективный effect), `Appraisal` (субъективные attitude/praise одного NPC), `SocialRelation` (`IRelationship`, immutable; **liking/dominance клэмп `[-1,1]`, familiarity/solidarity клэмп `[0,1]`** — разные диапазоны, поправлено после сверки с PDF), `FloatRange`, `SocialRelationPattern` (запрос-паттерн для `Matches`).
+- `Dynamics/Rules/` — `EmotionRules.ComputeStimulus` (триггер рис. 2 + интенсивность IV-A; поправлено: `effect==0` считается неотрицательным для желательности, praise-эмоции требуют `dc==1`), `PersonalityRules.Modulate`, `DecayRules.Decay`/`Merge`, `EmotionValence` (internal — точные наборы эмоций по измерениям: `LikingPositive/Negative`, `DominancePositive/Negative`, `DominanceExpressedPositive`, `SolidarityNegative`, `CoincidenceKinds`, `IncongruentPairs`), `SocialRelationDelta` (структура-дельта, складывается через `+`), `SocialRelationRules` (`FromOwnEmotion`/`FromObservedExpression`/`FromEmotionalCoincidence` — вычисляют дельту (= `f_sr`), `Apply` — применяет её один раз (= `g_sr`, internal `ApplyBoundedSigned`/`ApplyBoundedUnit`, см. `AssemblyInfo.cs` → `InternalsVisibleTo("RelationshipCore.Tests")`), `UpdateFamiliarityFromLikingShift`).
+- Архитектура `SocialRelationRules` поменялась относительно первой версии: раньше три метода каждый сразу возвращал обновлённый `SocialRelation` (несколько источников за одно взаимодействие давали бы двойное демпфирование g_sr); теперь методы `From*` возвращают складываемую `SocialRelationDelta`, а `Apply` — единственная точка, где применяется пологая функция у краёв. Это прямое соответствие формуле статьи `φ_sr = g_sr(relation, f_sr(...))`.
+- 62 юнит-теста в `RelationshipCore.Tests/Dynamics/` — все проходят (`dotnet test`), включая тесты на конкретные найденные баги (effect=0, dc-gate для praise, диапазоны familiarity/solidarity, точные наборы эмоций по рис. 4-6, отсутствие залипания на границах 0/1).
+- Список найденных и исправленных расхождений с первой (пересказанной) версией — подробно в разделе «Модель Ochs — что реализовать» выше (это теперь сверенный со статьёй текст, не пересказ по памяти).
 
 **Следующий шаг (Этап 3):** `NpcState` (Personality + EmotionVector + Appraisal, реестр `Dictionary<int, NpcState>` по `EntityId`), `SocialDynamicsEngine` (оркестратор в `RelationshipCore.Simulation`: `Perceive`/`ObserveExpression`, ленивое затухание по времени последнего обновления, запись результата в `DeepGraph` через `GetEdge`/`AddEdge`), `SocialRoleTable` (начальные `SocialRelation` из пар ролей через `AddCommonEdge`). Полный план — в разделе «Архитектура объединения слоёв» выше. Двигаться небольшими шагами с тестами.
 

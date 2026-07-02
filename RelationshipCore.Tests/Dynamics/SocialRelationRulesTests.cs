@@ -6,105 +6,145 @@ namespace RelationshipCore.Tests.Dynamics;
 public class SocialRelationRulesTests
 {
     [Fact]
-    public void UpdateFromOwnEmotion_PositiveEmotion_IncreasesLiking()
+    public void FromOwnEmotion_PositiveEmotion_IncreasesLiking()
     {
-        var current = SocialRelation.Neutral;
-        var joy = EmotionVector.Single(EmotionKind.Joy, 0.8f);
+        var delta = SocialRelationRules.FromOwnEmotion(EmotionVector.Single(EmotionKind.Joy, 0.8f));
 
-        var updated = SocialRelationRules.UpdateFromOwnEmotion(current, joy);
-
-        Assert.True(updated.Liking > current.Liking);
+        Assert.True(delta.Liking > 0f);
     }
 
     [Fact]
-    public void UpdateFromOwnEmotion_NegativeEmotion_DecreasesLiking()
+    public void FromOwnEmotion_NegativeEmotion_DecreasesLiking()
+    {
+        var delta = SocialRelationRules.FromOwnEmotion(EmotionVector.Single(EmotionKind.Fear, 0.8f));
+
+        Assert.True(delta.Liking < 0f);
+    }
+
+    [Fact]
+    public void FromOwnEmotion_ReliefAndDisappointment_DoNotAffectLiking()
+    {
+        // Рис. 4 не включает relief/disappointment в набор, влияющий на liking.
+        var relief = SocialRelationRules.FromOwnEmotion(EmotionVector.Single(EmotionKind.Relief, 0.8f));
+        var disappointment = SocialRelationRules.FromOwnEmotion(EmotionVector.Single(EmotionKind.Disappointment, 0.8f));
+
+        FloatAssert.Approximately(0f, relief.Liking);
+        FloatAssert.Approximately(0f, disappointment.Liking);
+    }
+
+    [Fact]
+    public void FromOwnEmotion_Fear_DecreasesOwnDominance()
+    {
+        var delta = SocialRelationRules.FromOwnEmotion(EmotionVector.Single(EmotionKind.Fear, 0.8f));
+
+        Assert.True(delta.Dominance < 0f);
+    }
+
+    [Fact]
+    public void FromOwnEmotion_Pride_IncreasesOwnDominance()
+    {
+        var delta = SocialRelationRules.FromOwnEmotion(EmotionVector.Single(EmotionKind.Pride, 0.8f));
+
+        Assert.True(delta.Dominance > 0f);
+    }
+
+    [Fact]
+    public void FromOwnEmotion_NegativeSolidaritySet_DecreasesSolidarity()
+    {
+        var delta = SocialRelationRules.FromOwnEmotion(EmotionVector.Single(EmotionKind.Disappointment, 0.6f));
+
+        Assert.True(delta.Solidarity < 0f);
+    }
+
+    [Fact]
+    public void FromObservedExpression_InterlocutorFearOrDistress_IncreasesDominance()
+    {
+        // "выражение страха собеседником -> своя dominance растёт" (рис. 5, "emotions expressed by j")
+        var fear = SocialRelationRules.FromObservedExpression(EmotionVector.Single(EmotionKind.Fear, 0.8f));
+        var distress = SocialRelationRules.FromObservedExpression(EmotionVector.Single(EmotionKind.Distress, 0.8f));
+
+        Assert.True(fear.Dominance > 0f);
+        Assert.True(distress.Dominance > 0f);
+    }
+
+    [Fact]
+    public void FromObservedExpression_OtherEmotions_DoNotAffectDominance()
+    {
+        // Рис. 5 "emotions expressed by j" содержит только fear/distress — pride/anger туда не входят.
+        var delta = SocialRelationRules.FromObservedExpression(EmotionVector.Single(EmotionKind.Pride, 0.8f));
+
+        FloatAssert.Approximately(0f, delta.Dominance);
+    }
+
+    [Fact]
+    public void FromEmotionalCoincidence_MatchingEmotions_IncreasesSolidarity()
+    {
+        var own = EmotionVector.Single(EmotionKind.Distress, 0.6f);
+        var other = EmotionVector.Single(EmotionKind.Distress, 0.5f);
+
+        var delta = SocialRelationRules.FromEmotionalCoincidence(own, other);
+
+        Assert.True(delta.Solidarity > 0f);
+    }
+
+    [Fact]
+    public void FromEmotionalCoincidence_IncongruentEmotions_DecreasesSolidarity()
+    {
+        // Рис. 6: joy у i и distress у j одновременно — явно перечисленная несовпадающая пара.
+        var own = EmotionVector.Single(EmotionKind.Joy, 0.6f);
+        var other = EmotionVector.Single(EmotionKind.Distress, 0.6f);
+
+        var delta = SocialRelationRules.FromEmotionalCoincidence(own, other);
+
+        Assert.True(delta.Solidarity < 0f);
+    }
+
+    [Fact]
+    public void FromEmotionalCoincidence_UnrelatedEmotions_LeavesSolidarityUnchanged()
+    {
+        // Pride не входит в набор эмоций, участвующих в сравнении совпадения/несовпадения.
+        var own = EmotionVector.Single(EmotionKind.Pride, 0.6f);
+        var other = EmotionVector.Single(EmotionKind.Pride, 0.6f);
+
+        var delta = SocialRelationRules.FromEmotionalCoincidence(own, other);
+
+        FloatAssert.Approximately(0f, delta.Solidarity);
+    }
+
+    [Fact]
+    public void Apply_CombinesMultipleDeltaSourcesInOneBoundedStep()
     {
         var current = SocialRelation.Neutral;
-        var fear = EmotionVector.Single(EmotionKind.Fear, 0.8f);
+        var ownFear = SocialRelationRules.FromOwnEmotion(EmotionVector.Single(EmotionKind.Fear, 0.8f));
+        var observedFear = SocialRelationRules.FromObservedExpression(EmotionVector.Single(EmotionKind.Fear, 0.8f));
 
-        var updated = SocialRelationRules.UpdateFromOwnEmotion(current, fear);
+        var updated = SocialRelationRules.Apply(current, ownFear + observedFear);
 
+        // Свой страх снижает dominance, наблюдаемый страх собеседника её поднимает — эффекты должны частично гасить друг друга.
         Assert.True(updated.Liking < current.Liking);
     }
 
     [Fact]
-    public void UpdateFromOwnEmotion_Fear_DecreasesOwnDominance()
+    public void Apply_ClampsLikingAndDominanceToSignedRange()
     {
-        var current = SocialRelation.Neutral;
-        var fear = EmotionVector.Single(EmotionKind.Fear, 0.8f);
+        var current = new SocialRelation(liking: 0.99f, dominance: 0.99f, familiarity: 0f, solidarity: 0f);
+        var delta = new SocialRelationDelta(liking: 10f, dominance: 10f);
 
-        var updated = SocialRelationRules.UpdateFromOwnEmotion(current, fear);
+        var updated = SocialRelationRules.Apply(current, delta);
 
-        Assert.True(updated.Dominance < current.Dominance);
+        Assert.True(updated.Liking <= 1f);
+        Assert.True(updated.Dominance <= 1f);
     }
 
     [Fact]
-    public void UpdateFromOwnEmotion_Pride_IncreasesOwnDominance()
+    public void Apply_ClampsSolidarityToUnitRange()
     {
-        var current = SocialRelation.Neutral;
-        var pride = EmotionVector.Single(EmotionKind.Pride, 0.8f);
+        var current = new SocialRelation(liking: 0f, dominance: 0f, familiarity: 0f, solidarity: 0.99f);
+        var delta = new SocialRelationDelta(solidarity: 10f);
 
-        var updated = SocialRelationRules.UpdateFromOwnEmotion(current, pride);
+        var updated = SocialRelationRules.Apply(current, delta);
 
-        Assert.True(updated.Dominance > current.Dominance);
-    }
-
-    [Fact]
-    public void UpdateFromObservedExpression_InterlocutorFear_IncreasesOwnDominance()
-    {
-        // "выражение страха собеседником -> своя dominance растёт" (сценарий грабителя, CLAUDE.md)
-        var current = SocialRelation.Neutral;
-        var interlocutorFear = EmotionVector.Single(EmotionKind.Fear, 0.8f);
-
-        var updated = SocialRelationRules.UpdateFromObservedExpression(current, interlocutorFear);
-
-        Assert.True(updated.Dominance > current.Dominance);
-    }
-
-    [Fact]
-    public void UpdateFromObservedExpression_InterlocutorPride_DecreasesOwnDominance()
-    {
-        var current = SocialRelation.Neutral;
-        var interlocutorPride = EmotionVector.Single(EmotionKind.Pride, 0.8f);
-
-        var updated = SocialRelationRules.UpdateFromObservedExpression(current, interlocutorPride);
-
-        Assert.True(updated.Dominance < current.Dominance);
-    }
-
-    [Fact]
-    public void UpdateFromObservedExpression_InterlocutorNegativeEmotion_DecreasesSolidarity()
-    {
-        var current = SocialRelation.Neutral;
-        var distress = EmotionVector.Single(EmotionKind.Distress, 0.6f);
-
-        var updated = SocialRelationRules.UpdateFromObservedExpression(current, distress);
-
-        Assert.True(updated.Solidarity < current.Solidarity);
-    }
-
-    [Fact]
-    public void UpdateSolidarityFromCoincidence_MatchingEmotions_IncreasesSolidarity()
-    {
-        var current = SocialRelation.Neutral;
-        var own = EmotionVector.Single(EmotionKind.Distress, 0.6f);
-        var other = EmotionVector.Single(EmotionKind.Distress, 0.5f);
-
-        var updated = SocialRelationRules.UpdateSolidarityFromCoincidence(current, own, other);
-
-        Assert.True(updated.Solidarity > current.Solidarity);
-    }
-
-    [Fact]
-    public void UpdateSolidarityFromCoincidence_NoOverlap_LeavesSolidarityUnchanged()
-    {
-        var current = SocialRelation.Neutral;
-        var own = EmotionVector.Single(EmotionKind.Joy, 0.6f);
-        var other = EmotionVector.Single(EmotionKind.Distress, 0.6f);
-
-        var updated = SocialRelationRules.UpdateSolidarityFromCoincidence(current, own, other);
-
-        FloatAssert.Approximately(current.Solidarity, updated.Solidarity);
+        Assert.InRange(updated.Solidarity, 0f, 1f);
     }
 
     [Fact]
@@ -122,11 +162,22 @@ public class SocialRelationRulesTests
     }
 
     [Fact]
-    public void ApplyBounded_ChangesLessNearExtremes()
+    public void ApplyBoundedSigned_ChangesLessNearExtremes()
     {
-        float deltaNearCenter = SocialRelationRules.ApplyBounded(0f, 0.5f) - 0f;
-        float deltaNearEdge = SocialRelationRules.ApplyBounded(0.95f, 0.5f) - 0.95f;
+        float deltaNearCenter = SocialRelationRules.ApplyBoundedSigned(0f, 0.5f) - 0f;
+        float deltaNearEdge = SocialRelationRules.ApplyBoundedSigned(0.95f, 0.5f) - 0.95f;
 
         Assert.True(deltaNearEdge < deltaNearCenter);
+    }
+
+    [Fact]
+    public void ApplyBoundedUnit_ChangesLessNearBothExtremes()
+    {
+        float deltaNearCenter = SocialRelationRules.ApplyBoundedUnit(0.5f, 0.3f) - 0.5f;
+        float deltaNearZero = SocialRelationRules.ApplyBoundedUnit(0.02f, 0.3f) - 0.02f;
+        float deltaNearOne = SocialRelationRules.ApplyBoundedUnit(0.98f, 0.3f) - 0.98f;
+
+        Assert.True(deltaNearZero < deltaNearCenter);
+        Assert.True(deltaNearOne < deltaNearCenter);
     }
 }

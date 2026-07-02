@@ -5,12 +5,22 @@ namespace RelationshipCore.Tests.Dynamics;
 public class SocialRelationTests
 {
     [Fact]
-    public void Constructor_ClampsValuesToRange()
+    public void Constructor_ClampsLikingAndDominanceToSignedRange()
     {
         var relation = new SocialRelation(liking: 1.5f, dominance: -1.5f, familiarity: 0f, solidarity: 0f);
 
         Assert.Equal(1f, relation.Liking);
         Assert.Equal(-1f, relation.Dominance);
+    }
+
+    [Fact]
+    public void Constructor_ClampsFamiliarityAndSolidarityToUnitRange()
+    {
+        // Статья определяет familiarity и solidarity как ∈[0,1] — не [-1,1], в отличие от liking/dominance.
+        var relation = new SocialRelation(liking: 0f, dominance: 0f, familiarity: -0.5f, solidarity: 1.5f);
+
+        Assert.Equal(0f, relation.Familiarity);
+        Assert.Equal(1f, relation.Solidarity);
     }
 
     [Fact]

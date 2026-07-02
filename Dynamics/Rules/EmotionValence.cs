@@ -3,31 +3,64 @@ using RelationshipCore.Dynamics;
 namespace RelationshipCore.Dynamics.Rules;
 
 /// <summary>
-/// Классификация эмоций по знаку (позитивные/негативные) и по влиянию на доминантность
-/// выражающего — вспомогательные данные для SocialRelationRules (рис. 4-6 статьи Ochs).
+/// Точные наборы эмоций по измерениям SocialRelation — рис. 4 (liking), рис. 5 (dominance) и
+/// рис. 6 (solidarity) статьи Ochs. Наборы для разных измерений НЕ совпадают (например,
+/// relief/disappointment не входят в набор liking, admiration не входит в набор solidarity) —
+/// поэтому это отдельные списки, а не один общий "позитив/негатив".
 /// </summary>
 internal static class EmotionValence
 {
-    public static readonly EmotionKind[] Positive =
+    /// <summary>Рис. 4: "emotions of i caused by j" → +liking.</summary>
+    public static readonly EmotionKind[] LikingPositive =
     {
-        EmotionKind.Joy, EmotionKind.Hope, EmotionKind.Relief, EmotionKind.Pride, EmotionKind.Admiration,
+        EmotionKind.Joy, EmotionKind.Hope, EmotionKind.Admiration, EmotionKind.Pride,
     };
 
-    public static readonly EmotionKind[] Negative =
+    /// <summary>Рис. 4: "emotions of i caused by j" → -liking.</summary>
+    public static readonly EmotionKind[] LikingNegative =
     {
-        EmotionKind.Distress, EmotionKind.Fear, EmotionKind.Disappointment, EmotionKind.Shame, EmotionKind.Anger,
+        EmotionKind.Distress, EmotionKind.Fear, EmotionKind.Anger, EmotionKind.Shame,
     };
 
-    /// <summary>Pride/anger — "напористые" эмоции, поднимающие доминантность того, кто их испытывает.</summary>
-    public static readonly EmotionKind[] DominanceRaising = { EmotionKind.Pride, EmotionKind.Anger };
+    /// <summary>Рис. 5: "emotions of i caused by j" → +dominance.</summary>
+    public static readonly EmotionKind[] DominancePositive = { EmotionKind.Pride, EmotionKind.Anger };
 
-    /// <summary>Fear/distress/admiration/shame — "подчинённые" эмоции, снижающие доминантность испытывающего.</summary>
-    public static readonly EmotionKind[] DominanceLowering =
+    /// <summary>
+    /// Рис. 5: "emotions of i caused by j" → -dominance. Текст статьи (раздел IV-D-2) явно
+    /// перечисляет 4 эмоции ("fear, distress, admiration, or shame"), хотя на самой диаграмме
+    /// shame визуально отсутствует (вероятно, опечатка в оригинале) — доверяем тексту.
+    /// </summary>
+    public static readonly EmotionKind[] DominanceNegative =
     {
         EmotionKind.Fear, EmotionKind.Distress, EmotionKind.Admiration, EmotionKind.Shame,
     };
 
-    public static readonly EmotionKind[] All = (EmotionKind[])Enum.GetValues(typeof(EmotionKind));
+    /// <summary>Рис. 5: "emotions expressed by j" → +dominance у наблюдателя i. Только эти две.</summary>
+    public static readonly EmotionKind[] DominanceExpressedPositive = { EmotionKind.Fear, EmotionKind.Distress };
+
+    /// <summary>Рис. 6: "emotions of i caused by j" → -solidarity.</summary>
+    public static readonly EmotionKind[] SolidarityNegative =
+    {
+        EmotionKind.Distress, EmotionKind.Fear, EmotionKind.Disappointment, EmotionKind.Shame, EmotionKind.Anger,
+    };
+
+    /// <summary>Рис. 6: типы эмоций, участвующие в сравнении "совпадение/несовпадение" для solidarity.</summary>
+    public static readonly EmotionKind[] CoincidenceKinds =
+    {
+        EmotionKind.Joy, EmotionKind.Hope, EmotionKind.Distress, EmotionKind.Fear,
+    };
+
+    /// <summary>
+    /// Рис. 6: несовпадающие (противоположные по желательности) пары (i, j) → -solidarity.
+    /// Например, joy у i и distress у j одновременно — несовпадение.
+    /// </summary>
+    public static readonly (EmotionKind Own, EmotionKind Other)[] IncongruentPairs =
+    {
+        (EmotionKind.Joy, EmotionKind.Distress),
+        (EmotionKind.Hope, EmotionKind.Fear),
+        (EmotionKind.Distress, EmotionKind.Joy),
+        (EmotionKind.Fear, EmotionKind.Hope),
+    };
 
     public static float Sum(EmotionVector emotions, EmotionKind[] kinds)
     {
@@ -39,11 +72,4 @@ internal static class EmotionValence
 
         return total;
     }
-
-    /// <summary>Сумма позитивных минус сумма негативных — знак и сила общей желательности испытанного.</summary>
-    public static float NetValence(EmotionVector emotions) => Sum(emotions, Positive) - Sum(emotions, Negative);
-
-    /// <summary>Сумма "напористых" минус сумма "подчинённых" эмоций — сдвиг собственной доминантности.</summary>
-    public static float NetDominanceShift(EmotionVector emotions) =>
-        Sum(emotions, DominanceRaising) - Sum(emotions, DominanceLowering);
 }

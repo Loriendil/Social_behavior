@@ -19,16 +19,23 @@ public static class EmotionRules
 
         float effect = actions.GetEffect(evt.Action);
         float attitude = perceiverAppraisal.GetAttitude(evt.PatientId);
-        float desirability = MathF.Sign(effect) * MathF.Sign(attitude);
 
-        if (desirability != 0f)
+        // Рис. 2: верхняя ветка — (effect >= 0 И attitude > 0) ИЛИ (effect < 0 И attitude < 0);
+        // effect = 0 считается "положительным" наравне с effect > 0 — это НЕ обычный знак (sign(0) = 0),
+        // поэтому нельзя использовать MathF.Sign(effect) напрямую.
+        if (attitude != 0f)
         {
+            float effectSign = effect >= 0f ? 1f : -1f;
+            float attitudeSign = attitude > 0f ? 1f : -1f;
+            float desirability = effectSign * attitudeSign;
+
             float intensity = Average(MathF.Abs(attitude), MathF.Abs(effect));
             result = ApplyDesirabilityTrigger(result, desirability, evt.Dc, intensity);
         }
 
+        // Рис. 2: ветки pride/admiration/shame/anger помечены dc=1 — срабатывают только для очевидца.
         float praise = perceiverAppraisal.GetPraise(evt.Action);
-        if (praise != 0f)
+        if (praise != 0f && evt.Dc >= 1f)
         {
             bool perceiverIsAgent = perceiverId == evt.AgentId;
             result = ApplyPraiseTrigger(result, praise, perceiverIsAgent);
@@ -39,7 +46,7 @@ public static class EmotionRules
 
     /// <summary>
     /// dc=1 (очевидец) → joy/distress; dc∈(0,1) (ожидание) → hope/fear, масштабировано dc;
-    /// dc=0 (ожидаемое не случилось) → relief (не случилось плохое) / disappointment (не случилось хорошее).
+    /// dc=0 (ожидаемое не случилось) → disappointment (не случилось хорошее) / relief (не случилось плохое).
     /// </summary>
     private static EmotionVector ApplyDesirabilityTrigger(
         EmotionVector vector, float desirability, float dc, float intensity)
@@ -60,8 +67,8 @@ public static class EmotionRules
     }
 
     /// <summary>
-    /// praise + роль воспринимающего в событии: сам совершил похвальное/постыдное действие →
-    /// pride/shame; чужое похвальное/постыдное действие → admiration/anger.
+    /// praise + роль воспринимающего в событии (только dc=1): сам совершил похвальное/постыдное
+    /// действие → pride/shame; чужое похвальное/постыдное действие → admiration/anger.
     /// </summary>
     private static EmotionVector ApplyPraiseTrigger(EmotionVector vector, float praise, bool perceiverIsAgent)
     {

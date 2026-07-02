@@ -3,73 +3,63 @@ using RelationshipCore.Dynamics;
 namespace RelationshipCore.Dynamics.Rules;
 
 /// <summary>
-/// Обновление SocialRelation от эмоций (рис. 4-6 статьи Ochs). Три независимых источника
-/// изменений применяются к ребру владельца отношения (наблюдателя i, ребро i-&gt;j) отдельными
-/// методами, чтобы движок (Этап 3) мог комбинировать их по ситуации:
+/// Обновление SocialRelation от эмоций (раздел IV-D статьи Ochs, рис. 4-6). Следует структуре
+/// статьи: φ_sr(relation, e_d_i(e), e_exp_j(t)) = g_sr(relation, f_sr(e_d_i(e), e_exp_j(t))) —
+/// сначала несколько источников изменения складываются в один вектор дельты (f_sr, методы
+/// From*), затем дельта применяется к текущему отношению ОДИН раз (g_sr, метод Apply). Так
+/// пологое затухание у краёв диапазона (см. ApplyBoundedSigned/Unit) срабатывает один раз за
+/// взаимодействие, а не по разу на каждый источник эмоции.
 ///
-/// 1. UpdateFromOwnEmotion — эмоция, которую наблюдатель САМ испытал из-за действия j
-///    (напр. страх грабителя при аресте), обновляет его же ребро к j: liking по знаку
-///    испытанной эмоции; dominance — pride/anger поднимают собственную доминантность,
-///    fear/distress/admiration/shame снижают её (см. сценарий "грабитель" в CLAUDE.md).
-/// 2. UpdateFromObservedExpression — эмоция, которую наблюдатель ВИДИТ у j (выражение страха
-///    собеседником и т.п.), комплементарно обновляет его dominance к j (если j выглядит менее
-///    доминантным/подчинённым, наблюдатель ощущает себя более доминантным) и solidarity
-///    (негативная эмоция у j снижает солидарность наблюдателя к j).
-/// 3. UpdateSolidarityFromCoincidence — совпадение эмоций, которые выражают обе стороны,
-///    поднимает solidarity (сближает после общего переживания).
-///
-/// Familiarity явно не запускается отдельным правилом — статья описывает её рост как
-/// косвенный, через liking (см. UpdateFamiliarityFromLikingShift).
+/// Источники (рис. 4-6):
+/// 1. FromOwnEmotion — эмоция, которую сам испытал из-за действия j (напр. страх грабителя при
+///    аресте): рис. 4 → liking, рис. 5 верхняя часть → dominance, рис. 6 нижняя часть → solidarity.
+/// 2. FromObservedExpression — эмоция, которую ВЫРАЖАЕТ j (страх/дистресс собеседника): рис. 5
+///    нижняя часть → dominance. Только эти две эмоции, никакой иной связи в статье нет.
+/// 3. FromEmotionalCoincidence — совпадение/несовпадение выражаемых joy/hope/distress/fear между
+///    сторонами: рис. 6 верхняя часть → solidarity.
 /// </summary>
 public static class SocialRelationRules
 {
     public const float DefaultGain = 0.3f;
 
-    public static SocialRelation UpdateFromOwnEmotion(
-        SocialRelation current, EmotionVector ownEmotion, float gain = DefaultGain)
+    public static SocialRelationDelta FromOwnEmotion(EmotionVector ownEmotion) => new(
+        liking: EmotionValence.Sum(ownEmotion, EmotionValence.LikingPositive)
+            - EmotionValence.Sum(ownEmotion, EmotionValence.LikingNegative),
+        dominance: EmotionValence.Sum(ownEmotion, EmotionValence.DominancePositive)
+            - EmotionValence.Sum(ownEmotion, EmotionValence.DominanceNegative),
+        solidarity: -EmotionValence.Sum(ownEmotion, EmotionValence.SolidarityNegative));
+
+    public static SocialRelationDelta FromObservedExpression(EmotionVector expresserEmotion) => new(
+        dominance: EmotionValence.Sum(expresserEmotion, EmotionValence.DominanceExpressedPositive));
+
+    public static SocialRelationDelta FromEmotionalCoincidence(EmotionVector ownEmotion, EmotionVector otherEmotion)
     {
-        float likingDelta = EmotionValence.NetValence(ownEmotion) * gain;
-        float dominanceDelta = EmotionValence.NetDominanceShift(ownEmotion) * gain;
+        float solidarityDelta = 0f;
 
-        return new SocialRelation(
-            liking: ApplyBounded(current.Liking, likingDelta),
-            dominance: ApplyBounded(current.Dominance, dominanceDelta),
-            familiarity: current.Familiarity,
-            solidarity: current.Solidarity);
-    }
-
-    public static SocialRelation UpdateFromObservedExpression(
-        SocialRelation current, EmotionVector expresserEmotion, float gain = DefaultGain)
-    {
-        // Комплементарно UpdateFromOwnEmotion: то, что снижает доминантность выражающего,
-        // повышает доминантность наблюдателя (см. "выражение страха собеседником -> своя dominance растёт").
-        float dominanceDelta = -EmotionValence.NetDominanceShift(expresserEmotion) * gain;
-        float solidarityDelta = -EmotionValence.Sum(expresserEmotion, EmotionValence.Negative) * gain;
-
-        return new SocialRelation(
-            liking: current.Liking,
-            dominance: ApplyBounded(current.Dominance, dominanceDelta),
-            familiarity: current.Familiarity,
-            solidarity: ApplyBounded(current.Solidarity, solidarityDelta));
-    }
-
-    public static SocialRelation UpdateSolidarityFromCoincidence(
-        SocialRelation current, EmotionVector ownEmotion, EmotionVector otherEmotion, float gain = DefaultGain)
-    {
-        float coincidence = 0f;
-        foreach (var kind in EmotionValence.All)
+        foreach (var kind in EmotionValence.CoincidenceKinds)
         {
-            coincidence += MathF.Min(ownEmotion[kind], otherEmotion[kind]);
+            solidarityDelta += MathF.Min(ownEmotion[kind], otherEmotion[kind]);
         }
 
-        return new SocialRelation(
-            liking: current.Liking,
-            dominance: current.Dominance,
-            familiarity: current.Familiarity,
-            solidarity: ApplyBounded(current.Solidarity, coincidence * gain));
+        foreach (var (own, other) in EmotionValence.IncongruentPairs)
+        {
+            solidarityDelta -= MathF.Min(ownEmotion[own], otherEmotion[other]);
+        }
+
+        return new SocialRelationDelta(solidarity: solidarityDelta);
     }
 
-    /// <summary>Familiarity растёт косвенно — вместе с любым изменением liking, вне зависимости от знака.</summary>
+    /// <summary>g_sr: применяет накопленную (сложенную из нескольких источников) дельту к текущему отношению.</summary>
+    public static SocialRelation Apply(SocialRelation current, SocialRelationDelta delta, float gain = DefaultGain) => new(
+        liking: ApplyBoundedSigned(current.Liking, delta.Liking * gain),
+        dominance: ApplyBoundedSigned(current.Dominance, delta.Dominance * gain),
+        familiarity: current.Familiarity,
+        solidarity: ApplyBoundedUnit(current.Solidarity, delta.Solidarity * gain));
+
+    /// <summary>
+    /// Familiarity явно не входит в f_sr/g_sr статьи ("механизм... не представлен в этой работе") —
+    /// растёт косвенно вместе с изменением liking; отдельный шаг после Apply.
+    /// </summary>
     public static SocialRelation UpdateFamiliarityFromLikingShift(
         SocialRelation before, SocialRelation after, float gain = DefaultGain)
     {
@@ -78,17 +68,32 @@ public static class SocialRelationRules
         return new SocialRelation(
             liking: after.Liking,
             dominance: after.Dominance,
-            familiarity: ApplyBounded(after.Familiarity, familiarityDelta),
+            familiarity: ApplyBoundedUnit(after.Familiarity, familiarityDelta),
             solidarity: after.Solidarity);
     }
 
     /// <summary>
-    /// g_sr: пологая у краёв ±1 функция обновления — на экстремумах отношение меняется
-    /// медленнее (раздел IV статьи Ochs). Синусоидальное затухание множителя к delta.
+    /// Нижний порог демпфера: без него ApplyBoundedUnit в точке current=0 (типичное стартовое
+    /// значение familiarity/solidarity) даёт множитель ровно 0 — отношение никогда не сдвинулось
+    /// бы с нейтральной точки. Порог сохраняет качественное свойство "труднее меняться у краёв",
+    /// не допуская полной блокировки.
     /// </summary>
-    internal static float ApplyBounded(float current, float delta)
+    private const float MinDampening = 0.15f;
+
+    /// <summary>
+    /// g_sr для liking/dominance ∈[-1,1]: пологая у краёв ±1 (статья прямо предлагает синусоиду
+    /// как пример реализации g_sr, не давая точной формулы) — центр диапазона 0.
+    /// </summary>
+    internal static float ApplyBoundedSigned(float current, float delta)
     {
-        float dampening = MathF.Cos(current * MathF.PI / 2f);
+        float dampening = MathF.Max(MinDampening, MathF.Cos(current * MathF.PI / 2f));
         return Math.Clamp(current + (delta * dampening), -1f, 1f);
+    }
+
+    /// <summary>Тот же принцип для familiarity/solidarity ∈[0,1]: пологая у ОБОИХ краёв (0 и 1), центр 0.5.</summary>
+    internal static float ApplyBoundedUnit(float current, float delta)
+    {
+        float dampening = MathF.Max(MinDampening, MathF.Sin(current * MathF.PI));
+        return Math.Clamp(current + (delta * dampening), 0f, 1f);
     }
 }

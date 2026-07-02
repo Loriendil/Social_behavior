@@ -52,6 +52,21 @@ public class EmotionRulesTests
         FloatAssert.Approximately(expectedIntensity, stimulus[expectedKind]);
     }
 
+    [Theory]
+    [InlineData(0f, 0.4f, EmotionKind.Joy)]
+    [InlineData(0f, -0.4f, EmotionKind.Distress)]
+    public void ComputeStimulus_ZeroEffect_StillCountsAsNonNegativeForDesirability(float effect, float attitude, EmotionKind expectedKind)
+    {
+        // Рис. 2: ветка триггера использует "effect >= 0", а не "effect > 0" — effect == 0
+        // должен по-прежнему давать эмоцию (в паре со знаком attitude), а не гасить желательность в 0.
+        var (actions, appraisal) = BuildDictionaries(effect, attitude);
+        var evt = new GameEvent(AgentId, Action, PatientId, dc: 1f);
+
+        var stimulus = EmotionRules.ComputeStimulus(evt, actions, appraisal, PerceiverId);
+
+        Assert.True(stimulus[expectedKind] > 0f);
+    }
+
     [Fact]
     public void ComputeStimulus_NeutralAttitude_TriggersNoDesirabilityEmotion()
     {
@@ -83,6 +98,20 @@ public class EmotionRulesTests
         var stimulus = EmotionRules.ComputeStimulus(evt, actions, appraisal, PerceiverId);
 
         FloatAssert.Approximately(MathF.Abs(praise), stimulus[expectedKind]);
+    }
+
+    [Fact]
+    public void ComputeStimulus_Praise_OnlyTriggersForEyewitness()
+    {
+        // Рис. 2: ветки pride/admiration/shame/anger помечены dc=1 — не должны срабатывать при dc<1.
+        var actions = new ActionDictionary();
+        var appraisal = new Appraisal();
+        appraisal.SetPraise(Action, 0.7f);
+        var evt = new GameEvent(PerceiverId, Action, PatientId, dc: 0.5f);
+
+        var stimulus = EmotionRules.ComputeStimulus(evt, actions, appraisal, PerceiverId);
+
+        Assert.Equal(0f, stimulus[EmotionKind.Pride]);
     }
 
     private static (ActionDictionary Actions, Appraisal Appraisal) BuildDictionaries(float effect, float attitude)
