@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="RelationshipCore.csproj" />
+  <Project Path="RelationshipCore.Tests/RelationshipCore.Tests.csproj" />
+</Solution>

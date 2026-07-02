@@ -1,0 +1,16 @@
+## .NET
+bin/
+obj/
+*.user
+
+## Visual Studio
+.vs/
+
+## Rider / ReSharper
+.idea/
+*.DotSettings.user
+
+## Справочные материалы: PDF статей (копирайт) и ZIP с чужим кодом (O'Connor) —
+## не публикуем в репозитории, хранятся только локально.
+docs/*.pdf
+docs/*.zip
