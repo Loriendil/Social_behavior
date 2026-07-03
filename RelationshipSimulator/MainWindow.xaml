@@ -1,0 +1,40 @@
+<Window x:Class="RelationshipSimulator.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:RelationshipSimulator"
+        mc:Ignorable="d"
+        Title="RelationshipSimulator" Height="500" Width="900">
+    <TabControl Margin="8">
+        <TabItem Header="Персонажи">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8">
+                    <Button Content="Добавить персонажа" Padding="8,4" Click="AddNpc_Click" />
+                </StackPanel>
+                <DataGrid x:Name="NpcGrid" Margin="8" AutoGenerateColumns="False"
+                          ItemsSource="{Binding Npcs}" CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="EntityId" Binding="{Binding EntityId}" IsReadOnly="True" Width="80" />
+                        <DataGridTextColumn Header="Extraversion [-1..1]" Binding="{Binding Extraversion, StringFormat=F2}" Width="160" />
+                        <DataGridTextColumn Header="Neuroticism [-1..1]" Binding="{Binding Neuroticism, StringFormat=F2}" Width="160" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </TabItem>
+        <TabItem Header="Словарь действий">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8">
+                    <Button Content="Добавить действие" Padding="8,4" Click="AddAction_Click" />
+                </StackPanel>
+                <DataGrid x:Name="ActionGrid" Margin="8" AutoGenerateColumns="False"
+                          ItemsSource="{Binding Actions}" CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="ActionId" Binding="{Binding ActionId}" IsReadOnly="True" Width="80" />
+                        <DataGridTextColumn Header="Эффект [-1..1]" Binding="{Binding Effect, StringFormat=F2}" Width="160" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </TabItem>
+    </TabControl>
+</Window>

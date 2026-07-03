@@ -20,7 +20,13 @@ public sealed class NpcState
 
     public int EntityId { get; }
 
-    public Personality Personality { get; }
+    /// <summary>
+    /// Изменяемо (как и Emotions/LastUpdateTime — NpcState реестровая запись, а не immutable
+    /// value-объект): редактор персонажей должен уметь менять личность уже созданного NPC.
+    /// Сам Personality остаётся immutable-структурой — меняется лишь то, на какое значение
+    /// ссылается контейнер.
+    /// </summary>
+    public Personality Personality { get; set; }
 
     public Appraisal Appraisal { get; }
 
