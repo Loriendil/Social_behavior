@@ -6,10 +6,4 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Compile Remove="RelationshipCore.Tests/**" />
-    <EmbeddedResource Remove="RelationshipCore.Tests/**" />
-    <None Remove="RelationshipCore.Tests/**" />
-  </ItemGroup>
-
 </Project>

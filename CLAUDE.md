@@ -35,6 +35,16 @@ EOF
 
 Все проекты — строго на одной версии .NET (10.0, LTS). Ядро должно оставаться переносимым (потенциально netstandard2.1 для Unity), поэтому никаких ссылок на WPF/WinForms из `RelationshipCore`.
 
+Плоская раскладка на диске (перестроено 2026-07-03 перед началом Этапа 6 — раньше `RelationshipCore.csproj` лежал прямо в корне репозитория, а `RelationshipCore.Tests` — вложенной папкой внутри него, что требовало `<Compile Remove="RelationshipCore.Tests/**" />`-guard'а; теперь три проекта — настоящие соседние папки на уровне решения, guard не нужен):
+
+```
+RelationshipCore.slnx        — корень репозитория, только решение
+RelationshipCore/             — .csproj ядра + исходники (Dynamics/, Edges/, Graphs/, Groups/, Interfaces/, Learning/, Nodes/, Simulation/)
+RelationshipCore.Tests/       — .csproj тестов
+RelationshipSimulator/        — .csproj UI (WPF)
+docs/                         — PDF статей, общий справочный материал не для конкретного проекта
+```
+
 ## Архитектурные решения (уже обсуждены и приняты)
 
 1. **Идентификация без `IEquatable<T>`.** Автор диссертации в разделе 5.4 сам признаёт, что завязка на `IEquatable` была ошибкой (мешает расширениям). Используем собственное свойство `EntityId` / метод `Matches()`.
@@ -170,8 +180,6 @@ RelationshipCore.Simulation               — оркестратор (Этап 3
 Обсуждение начато в Claude (чат). Пользователь создаёт проект `RelationshipCore` (шаблон «Библиотека классов», .NET 10) в Visual Studio. Согласованы стартовые интерфейсы (см. выше).
 
 **Этап 1 реализован:** `Interfaces/` (`INode`, `IEdge`, `IRelationship`, `IMessage` — точно по черновику выше, в корневом namespace `RelationshipCore`), `Nodes/Node.cs`, `Edges/Edge.cs` — минимальные реализации, `Graphs/Graph.cs` — хранилище узлов/рёбер на `Dictionary<int, ...>` по `EntityId` (без O(n²)-поиска), `Graphs/DeepGraph.cs` — семантика прямых/косвенных рёбер (`AddDirectEdge`, `AddEdge` с произвольным owner для косвенных рёбер, `GetDirectEdges`/`GetIndirectEdges`, `WithRelationship`/`WithRelationshipTo`, `AddCommonEdge`). Добавлен `RelationshipCore.Tests` (xUnit) с 12 тестами на граф — все проходят (`dotnet test`).
-
-Важный нюанс структуры: `RelationshipCore.Tests` лежит вложенной папкой внутри каталога `RelationshipCore` (а не рядом на уровне решения), поэтому в `RelationshipCore.csproj` пришлось добавить `<Compile Remove="RelationshipCore.Tests/**" />` — иначе SDK-проект по умолчанию глобит файлы тестов в основную сборку.
 
 **Этап 2 реализован** (после архитектурной консультации с Fable 5 — см. раздел «Архитектура объединения слоёв» выше), **затем сверен и исправлен по оригинальному PDF статьи Ochs** (2026-07-02, тот же день — см. «Как читать PDF в этой рабочей среде» выше про PyMuPDF-обходной путь):
 
