@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:RelationshipSimulator"
         mc:Ignorable="d"
-        Title="RelationshipSimulator" Height="500" Width="900">
+        Title="RelationshipSimulator" Height="600" Width="1000">
     <TabControl Margin="8">
         <TabItem Header="Персонажи">
             <DockPanel>
@@ -18,6 +18,7 @@
                         <DataGridTextColumn Header="EntityId" Binding="{Binding EntityId}" IsReadOnly="True" Width="80" />
                         <DataGridTextColumn Header="Extraversion [-1..1]" Binding="{Binding Extraversion, StringFormat=F2}" Width="160" />
                         <DataGridTextColumn Header="Neuroticism [-1..1]" Binding="{Binding Neuroticism, StringFormat=F2}" Width="160" />
+                        <DataGridTextColumn Header="Attitude к себе [-1..1]" Binding="{Binding SelfAttitude, StringFormat=F2}" Width="170" />
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>
@@ -35,6 +36,37 @@
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>
+        </TabItem>
+        <TabItem Header="Сценарий">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="2*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="3*" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="8">
+                    <Button Content="Добавить событие" Padding="8,4" Click="AddEvent_Click" />
+                    <Button Content="Запустить сценарий" Padding="8,4" Margin="8,0,0,0" Click="RunScenario_Click" />
+                </StackPanel>
+
+                <DataGrid x:Name="EventGrid" Grid.Row="1" Margin="8" AutoGenerateColumns="False"
+                          ItemsSource="{Binding Events}" CanUserAddRows="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Кто воспринимает (perceiverId)" Binding="{Binding PerceiverId}" Width="180" />
+                        <DataGridTextColumn Header="Агент (agentId)" Binding="{Binding AgentId}" Width="120" />
+                        <DataGridTextColumn Header="Действие (actionId)" Binding="{Binding ActionId}" Width="130" />
+                        <DataGridTextColumn Header="Объект (patientId)" Binding="{Binding PatientId}" Width="120" />
+                        <DataGridTextColumn Header="dc [0..1]" Binding="{Binding Dc, StringFormat=F2}" Width="90" />
+                        <DataGridTextColumn Header="Время" Binding="{Binding Time, StringFormat=F2}" Width="90" />
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <TextBlock Grid.Row="2" Text="Результат (эмоции и отношения после прогона):" Margin="8,8,8,0" FontWeight="Bold" />
+                <TextBox x:Name="ResultsText" Grid.Row="3" Margin="8" IsReadOnly="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto" FontFamily="Consolas" />
+            </Grid>
         </TabItem>
     </TabControl>
 </Window>

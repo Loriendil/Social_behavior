@@ -37,6 +37,21 @@ public sealed class NpcRow : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// Attitude к самому себе — самое нагруженное значение Appraisal во всех сценариях статьи
+    /// Ochs (самоуважение: "плохое для меня" событие вызывает страх/дистресс). Без него события
+    /// с patient == EntityId никогда не триггерят эмоцию (attitude==0 — ни одна ветка не срабатывает).
+    /// </summary>
+    public float SelfAttitude
+    {
+        get => _state.Appraisal.GetAttitude(_state.EntityId);
+        set
+        {
+            _state.Appraisal.SetAttitude(_state.EntityId, value);
+            OnPropertyChanged();
+        }
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void OnPropertyChanged([CallerMemberName] string? name = null) =>
