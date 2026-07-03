@@ -16,7 +16,8 @@ namespace RelationshipCore.Dynamics.Rules;
 /// 2. FromObservedExpression — эмоция, которую ВЫРАЖАЕТ j (страх/дистресс собеседника): рис. 5
 ///    нижняя часть → dominance. Только эти две эмоции, никакой иной связи в статье нет.
 /// 3. FromEmotionalCoincidence — совпадение/несовпадение выражаемых joy/hope/distress/fear между
-///    сторонами: рис. 6 верхняя часть → solidarity.
+///    сторонами: рис. 6 верхняя часть → solidarity, и (раздел IV-B, текст иллюстративного примера
+///    допроса грабителя, сверено также по рис. 10) тем же приращением — побочный эффект на liking.
 /// </summary>
 public static class SocialRelationRules
 {
@@ -32,6 +33,14 @@ public static class SocialRelationRules
     public static SocialRelationDelta FromObservedExpression(EmotionVector expresserEmotion) => new(
         dominance: EmotionValence.Sum(expresserEmotion, EmotionValence.DominanceExpressedPositive));
 
+    /// <summary>
+    /// Раздел IV-B статьи (иллюстративный сценарий допроса грабителя, стр. 291) прямым текстом:
+    /// "the congruence of the triggered emotion of the burglar and the emotion expressed by the
+    /// policeman... induce an increase of the solidarity AND, BY SIDE EFFECT, of the degree of
+    /// liking" — подтверждено также визуально по рис. 10 (значения liking и solidarity растут
+    /// на одном и том же шаге сценария). Раздел IV-D-4 (формулы) отдельной формулы для этого
+    /// побочного эффекта не даёт, поэтому используем то же приращение, что и для solidarity.
+    /// </summary>
     public static SocialRelationDelta FromEmotionalCoincidence(EmotionVector ownEmotion, EmotionVector otherEmotion)
     {
         float solidarityDelta = 0f;
@@ -46,7 +55,7 @@ public static class SocialRelationRules
             solidarityDelta -= MathF.Min(ownEmotion[own], otherEmotion[other]);
         }
 
-        return new SocialRelationDelta(solidarity: solidarityDelta);
+        return new SocialRelationDelta(liking: solidarityDelta, solidarity: solidarityDelta);
     }
 
     /// <summary>g_sr: применяет накопленную (сложенную из нескольких источников) дельту к текущему отношению.</summary>

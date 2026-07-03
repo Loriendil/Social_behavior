@@ -88,6 +88,20 @@ public class SocialRelationRulesTests
     }
 
     [Fact]
+    public void FromEmotionalCoincidence_MatchingEmotions_AlsoIncreasesLikingAsSideEffect()
+    {
+        // Раздел IV-B статьи (стр. 291): "...induce an increase of the solidarity and, by side
+        // effect, of the degree of liking" — подтверждено также по рис. 10 (burglar-policeman).
+        var own = EmotionVector.Single(EmotionKind.Distress, 0.6f);
+        var other = EmotionVector.Single(EmotionKind.Distress, 0.5f);
+
+        var delta = SocialRelationRules.FromEmotionalCoincidence(own, other);
+
+        Assert.True(delta.Liking > 0f);
+        FloatAssert.Approximately(delta.Solidarity, delta.Liking);
+    }
+
+    [Fact]
     public void FromEmotionalCoincidence_IncongruentEmotions_DecreasesSolidarity()
     {
         // Рис. 6: joy у i и distress у j одновременно — явно перечисленная несовпадающая пара.
@@ -97,6 +111,17 @@ public class SocialRelationRulesTests
         var delta = SocialRelationRules.FromEmotionalCoincidence(own, other);
 
         Assert.True(delta.Solidarity < 0f);
+    }
+
+    [Fact]
+    public void FromEmotionalCoincidence_IncongruentEmotions_AlsoDecreasesLikingAsSideEffect()
+    {
+        var own = EmotionVector.Single(EmotionKind.Joy, 0.6f);
+        var other = EmotionVector.Single(EmotionKind.Distress, 0.6f);
+
+        var delta = SocialRelationRules.FromEmotionalCoincidence(own, other);
+
+        Assert.True(delta.Liking < 0f);
     }
 
     [Fact]
