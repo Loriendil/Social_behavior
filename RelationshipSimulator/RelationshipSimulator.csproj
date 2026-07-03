@@ -4,6 +4,11 @@
     <ProjectReference Include="..\RelationshipCore\RelationshipCore.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Msagl.WpfGraphControl" Version="1.2.1" />
+    <PackageReference Include="OxyPlot.Wpf" Version="2.2.0" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>

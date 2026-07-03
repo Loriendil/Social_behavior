@@ -1,6 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using System.Windows;
+using System.Windows.Controls;
+using Microsoft.Msagl.WpfGraphControl;
+using OxyPlot;
+using OxyPlot.Axes;
+using OxyPlot.Series;
 using RelationshipCore.Dynamics;
 using RelationshipCore.Graphs;
 using RelationshipCore.Nodes;
@@ -9,15 +14,22 @@ using RelationshipCore.Simulation;
 namespace RelationshipSimulator;
 
 /// <summary>
-/// Редактор персонажей/словаря действий и редактор сценария (Этап 6, подпункты 1-2). Держит
-/// единственный экземпляр DeepGraph/ActionDictionary/SocialDynamicsEngine на всё приложение —
-/// остальные части UI (графики, визуализация графа) будут работать с этим же движком.
+/// Редактор персонажей/словаря действий, редактор сценария, графики эмоций и визуализация графа
+/// (Этап 6, все четыре подпункта). Держит единственный экземпляр
+/// DeepGraph/ActionDictionary/SocialDynamicsEngine на всё приложение — все вкладки работают с
+/// одним и тем же движком, а не создают свои копии.
+///
+/// Типы MSAGL (Microsoft.Msagl.Drawing.Graph/Node) везде пишутся полным именем — короткие имена
+/// Graph/Node уже заняты RelationshipCore.Graphs.Graph/RelationshipCore.Nodes.Node через using выше.
 /// </summary>
 public partial class MainWindow : Window
 {
     private readonly DeepGraph _graph = new();
     private readonly ActionDictionary _actions = new();
     private readonly SocialDynamicsEngine _engine;
+    private readonly List<(int NpcId, float Time, EmotionVector Emotions)> _emotionSamples = new();
+    private readonly GraphViewer _graphViewer = new();
+    private bool _graphViewerBound;
     private int _nextEntityId = 1;
     private int _nextActionId = 1;
 
@@ -55,20 +67,121 @@ public partial class MainWindow : Window
     {
         try
         {
+            _emotionSamples.Clear();
             foreach (var row in Events.OrderBy(r => r.Time))
             {
                 _engine.Perceive(
                     row.PerceiverId,
                     new GameEvent(row.AgentId, new ActionId(row.ActionId), row.PatientId, row.Dc),
                     row.Time);
+
+                _emotionSamples.Add((row.PerceiverId, row.Time, _engine.GetState(row.PerceiverId).Emotions));
             }
 
             ResultsText.Text = BuildResultsSummary();
+
+            if (ChartNpcSelector.SelectedItem is null && Npcs.Count > 0)
+            {
+                ChartNpcSelector.SelectedIndex = 0; // это само вызовет ChartNpcSelector_SelectionChanged
+            }
+            else
+            {
+                RebuildChart();
+            }
         }
         catch (InvalidOperationException ex)
         {
             ResultsText.Text = $"Ошибка: {ex.Message}\n\n(проверьте, что все perceiverId/agentId/patientId — это EntityId уже добавленных персонажей)";
         }
+    }
+
+    private void ChartNpcSelector_SelectionChanged(object sender, SelectionChangedEventArgs e) => RebuildChart();
+
+    /// <summary>
+    /// Строит график эмоций выбранного персонажа во времени (рис. 9 статьи Ochs) по накопленным
+    /// в RunScenario_Click снимкам EmotionVector. Показывает только те эмоции, что хоть раз были
+    /// заметно ненулевыми у этого персонажа — десять плоских нулевых линий только мешали бы читать график.
+    /// </summary>
+    private void RebuildChart()
+    {
+        if (ChartNpcSelector.SelectedItem is not NpcRow selected)
+        {
+            EmotionPlot.Model = new PlotModel { Title = "Сначала добавьте персонажа и запустите сценарий" };
+            return;
+        }
+
+        var samples = _emotionSamples
+            .Where(s => s.NpcId == selected.EntityId)
+            .OrderBy(s => s.Time)
+            .ToList();
+
+        var model = new PlotModel { Title = $"Эмоции персонажа {selected.EntityId} во времени" };
+        model.Axes.Add(new LinearAxis { Position = AxisPosition.Bottom, Title = "Время" });
+        model.Axes.Add(new LinearAxis { Position = AxisPosition.Left, Title = "Интенсивность", Minimum = 0, Maximum = 1 });
+
+        foreach (var kind in Enum.GetValues<EmotionKind>())
+        {
+            if (!samples.Any(s => s.Emotions[kind] > 0.01f))
+            {
+                continue;
+            }
+
+            var series = new LineSeries { Title = kind.ToString(), MarkerType = MarkerType.Circle };
+            foreach (var sample in samples)
+            {
+                series.Points.Add(new DataPoint(sample.Time, sample.Emotions[kind]));
+            }
+
+            model.Series.Add(series);
+        }
+
+        EmotionPlot.Model = model;
+    }
+
+    /// <summary>Строит MSAGL-граф из добавленных персонажей и прямых SocialRelation-рёбер между ними.</summary>
+    private void RefreshGraph_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_graphViewerBound)
+        {
+            _graphViewer.BindToPanel(GraphHost);
+            _graphViewerBound = true;
+        }
+
+        var graph = new Microsoft.Msagl.Drawing.Graph("relationships");
+
+        foreach (var npc in Npcs)
+        {
+            graph.AddNode(npc.EntityId.ToString());
+        }
+
+        foreach (var from in Npcs)
+        {
+            foreach (var to in Npcs)
+            {
+                if (from.EntityId == to.EntityId)
+                {
+                    continue;
+                }
+
+                var fromNode = _graph.GetNode(from.EntityId);
+                var toNode = _graph.GetNode(to.EntityId);
+                if (fromNode is null || toNode is null)
+                {
+                    continue;
+                }
+
+                if (_graph.GetEdge<SocialRelation>(fromNode, toNode)?.Relationship is SocialRelation relation)
+                {
+                    var edge = graph.AddEdge(from.EntityId.ToString(), to.EntityId.ToString());
+                    edge.LabelText = $"liking={relation.Liking:F2}";
+                    edge.Attr.Color = relation.Liking >= 0
+                        ? Microsoft.Msagl.Drawing.Color.Green
+                        : Microsoft.Msagl.Drawing.Color.Red;
+                }
+            }
+        }
+
+        _graphViewer.Graph = graph;
     }
 
     private string BuildResultsSummary()

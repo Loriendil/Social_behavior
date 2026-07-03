@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:RelationshipSimulator"
+        xmlns:oxy="http://oxyplot.org/wpf"
         mc:Ignorable="d"
         Title="RelationshipSimulator" Height="600" Width="1000">
     <TabControl Margin="8">
@@ -67,6 +68,24 @@
                 <TextBox x:Name="ResultsText" Grid.Row="3" Margin="8" IsReadOnly="True" TextWrapping="Wrap"
                          VerticalScrollBarVisibility="Auto" FontFamily="Consolas" />
             </Grid>
+        </TabItem>
+        <TabItem Header="Графики эмоций">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8">
+                    <TextBlock Text="Персонаж:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <ComboBox x:Name="ChartNpcSelector" Width="120" ItemsSource="{Binding Npcs}"
+                              DisplayMemberPath="EntityId" SelectionChanged="ChartNpcSelector_SelectionChanged" />
+                </StackPanel>
+                <oxy:PlotView x:Name="EmotionPlot" Margin="8" />
+            </DockPanel>
+        </TabItem>
+        <TabItem Header="Граф отношений">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8">
+                    <Button Content="Обновить визуализацию" Padding="8,4" Click="RefreshGraph_Click" />
+                </StackPanel>
+                <Grid x:Name="GraphHost" Margin="8" />
+            </DockPanel>
         </TabItem>
     </TabControl>
 </Window>
