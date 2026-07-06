@@ -6,20 +6,58 @@
         xmlns:local="clr-namespace:RelationshipSimulator"
         xmlns:oxy="http://oxyplot.org/wpf"
         mc:Ignorable="d"
+        PreviewMouseDown="Window_PreviewMouseDown"
         Title="RelationshipSimulator" Height="600" Width="1000">
-    <TabControl Margin="8">
+    <Window.Resources>
+        <!-- Задача 3: подсветка ячейки при невалидном вводе (Validation.HasError выставляется
+             ValidationRule ДО того, как значение попадёт в модель — см. RangeValidationRule). -->
+        <Style x:Key="ValidatingTextBoxStyle" TargetType="TextBox">
+            <Style.Triggers>
+                <Trigger Property="Validation.HasError" Value="True">
+                    <Setter Property="Background" Value="#FFE08080" />
+                    <Setter Property="ToolTip"
+                            Value="{Binding RelativeSource={RelativeSource Self}, Path=(Validation.Errors)[0].ErrorContent}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+    <TabControl x:Name="MainTabControl" Margin="8" SelectionChanged="MainTabControl_SelectionChanged">
         <TabItem Header="Персонажи">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8">
                     <Button Content="Добавить персонажа" Padding="8,4" Click="AddNpc_Click" />
                 </StackPanel>
-                <DataGrid x:Name="NpcGrid" Margin="8" AutoGenerateColumns="False"
+                <DataGrid x:Name="NpcGrid" Margin="8" AutoGenerateColumns="False" EnableRowVirtualization="False"
                           ItemsSource="{Binding Npcs}" CanUserAddRows="False">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="EntityId" Binding="{Binding EntityId}" IsReadOnly="True" Width="80" />
-                        <DataGridTextColumn Header="Extraversion [-1..1]" Binding="{Binding Extraversion, StringFormat=F2}" Width="160" />
-                        <DataGridTextColumn Header="Neuroticism [-1..1]" Binding="{Binding Neuroticism, StringFormat=F2}" Width="160" />
-                        <DataGridTextColumn Header="Attitude к себе [-1..1]" Binding="{Binding SelfAttitude, StringFormat=F2}" Width="170" />
+                        <DataGridTextColumn Header="Extraversion [-1..1]" Width="160" EditingElementStyle="{StaticResource ValidatingTextBoxStyle}">
+                            <DataGridTextColumn.Binding>
+                                <Binding Path="Extraversion" StringFormat="F2" ValidatesOnExceptions="True" NotifyOnValidationError="True">
+                                    <Binding.ValidationRules>
+                                        <local:RangeValidationRule Min="-1" Max="1" ValidationStep="ConvertedProposedValue" />
+                                    </Binding.ValidationRules>
+                                </Binding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="Neuroticism [-1..1]" Width="160" EditingElementStyle="{StaticResource ValidatingTextBoxStyle}">
+                            <DataGridTextColumn.Binding>
+                                <Binding Path="Neuroticism" StringFormat="F2" ValidatesOnExceptions="True" NotifyOnValidationError="True">
+                                    <Binding.ValidationRules>
+                                        <local:RangeValidationRule Min="-1" Max="1" ValidationStep="ConvertedProposedValue" />
+                                    </Binding.ValidationRules>
+                                </Binding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="Attitude к себе [-1..1]" Width="170" EditingElementStyle="{StaticResource ValidatingTextBoxStyle}">
+                            <DataGridTextColumn.Binding>
+                                <Binding Path="SelfAttitude" StringFormat="F2" ValidatesOnExceptions="True" NotifyOnValidationError="True">
+                                    <Binding.ValidationRules>
+                                        <local:RangeValidationRule Min="-1" Max="1" ValidationStep="ConvertedProposedValue" />
+                                    </Binding.ValidationRules>
+                                </Binding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>
@@ -29,14 +67,74 @@
                 <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8">
                     <Button Content="Добавить действие" Padding="8,4" Click="AddAction_Click" />
                 </StackPanel>
-                <DataGrid x:Name="ActionGrid" Margin="8" AutoGenerateColumns="False"
+                <DataGrid x:Name="ActionGrid" Margin="8" AutoGenerateColumns="False" EnableRowVirtualization="False"
                           ItemsSource="{Binding Actions}" CanUserAddRows="False">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="ActionId" Binding="{Binding ActionId}" IsReadOnly="True" Width="80" />
-                        <DataGridTextColumn Header="Эффект [-1..1]" Binding="{Binding Effect, StringFormat=F2}" Width="160" />
+                        <DataGridTextColumn Header="Эффект [-1..1]" Width="160" EditingElementStyle="{StaticResource ValidatingTextBoxStyle}">
+                            <DataGridTextColumn.Binding>
+                                <Binding Path="Effect" StringFormat="F2" ValidatesOnExceptions="True" NotifyOnValidationError="True">
+                                    <Binding.ValidationRules>
+                                        <local:RangeValidationRule Min="-1" Max="1" ValidationStep="ConvertedProposedValue" />
+                                    </Binding.ValidationRules>
+                                </Binding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>
+        </TabItem>
+        <TabItem Header="Субъективные оценки">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="Attitudes (задача 1): отношение владельца к произвольной сущности (EntityId)" Margin="8,8,8,0" FontWeight="Bold" />
+                <DataGrid x:Name="AttitudeGrid" Grid.Row="1" Margin="8" AutoGenerateColumns="False" EnableRowVirtualization="False"
+                          ItemsSource="{Binding Attitudes}" CanUserAddRows="False" CellEditEnding="CrossFieldGrid_CellEditEnding">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Владелец (OwnerId)" Binding="{Binding OwnerId}" Width="140" />
+                        <DataGridTextColumn Header="Цель (TargetEntityId)" Binding="{Binding TargetEntityId}" Width="150" />
+                        <DataGridTextColumn Header="Attitude [-1..1]" Width="150" EditingElementStyle="{StaticResource ValidatingTextBoxStyle}">
+                            <DataGridTextColumn.Binding>
+                                <Binding Path="Attitude" StringFormat="F2" ValidatesOnExceptions="True" NotifyOnValidationError="True">
+                                    <Binding.ValidationRules>
+                                        <local:RangeValidationRule Min="-1" Max="1" ValidationStep="ConvertedProposedValue" />
+                                    </Binding.ValidationRules>
+                                </Binding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+                <StackPanel Grid.Row="1" VerticalAlignment="Bottom" HorizontalAlignment="Right" Orientation="Horizontal" Margin="8">
+                    <Button Content="Добавить attitude" Padding="8,4" Click="AddAttitude_Click" />
+                </StackPanel>
+
+                <TextBlock Grid.Row="2" Text="Praise (задача 2): оценка владельцем похвальности действия (ActionId)" Margin="8,16,8,0" FontWeight="Bold" />
+                <DataGrid x:Name="PraiseGrid" Grid.Row="3" Margin="8" AutoGenerateColumns="False" EnableRowVirtualization="False"
+                          ItemsSource="{Binding Praises}" CanUserAddRows="False" CellEditEnding="CrossFieldGrid_CellEditEnding">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Владелец (OwnerId)" Binding="{Binding OwnerId}" Width="140" />
+                        <DataGridTextColumn Header="Действие (ActionId)" Binding="{Binding ActionId}" Width="140" />
+                        <DataGridTextColumn Header="Praise [-1..1]" Width="150" EditingElementStyle="{StaticResource ValidatingTextBoxStyle}">
+                            <DataGridTextColumn.Binding>
+                                <Binding Path="Praise" StringFormat="F2" ValidatesOnExceptions="True" NotifyOnValidationError="True">
+                                    <Binding.ValidationRules>
+                                        <local:RangeValidationRule Min="-1" Max="1" ValidationStep="ConvertedProposedValue" />
+                                    </Binding.ValidationRules>
+                                </Binding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+                <StackPanel Grid.Row="3" VerticalAlignment="Bottom" HorizontalAlignment="Right" Orientation="Horizontal" Margin="8">
+                    <Button Content="Добавить praise" Padding="8,4" Click="AddPraise_Click" />
+                </StackPanel>
+            </Grid>
         </TabItem>
         <TabItem Header="Сценарий">
             <Grid>
@@ -52,15 +150,31 @@
                     <Button Content="Запустить сценарий" Padding="8,4" Margin="8,0,0,0" Click="RunScenario_Click" />
                 </StackPanel>
 
-                <DataGrid x:Name="EventGrid" Grid.Row="1" Margin="8" AutoGenerateColumns="False"
+                <DataGrid x:Name="EventGrid" Grid.Row="1" Margin="8" AutoGenerateColumns="False" EnableRowVirtualization="False"
                           ItemsSource="{Binding Events}" CanUserAddRows="False">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="Кто воспринимает (perceiverId)" Binding="{Binding PerceiverId}" Width="180" />
                         <DataGridTextColumn Header="Агент (agentId)" Binding="{Binding AgentId}" Width="120" />
                         <DataGridTextColumn Header="Действие (actionId)" Binding="{Binding ActionId}" Width="130" />
                         <DataGridTextColumn Header="Объект (patientId)" Binding="{Binding PatientId}" Width="120" />
-                        <DataGridTextColumn Header="dc [0..1]" Binding="{Binding Dc, StringFormat=F2}" Width="90" />
-                        <DataGridTextColumn Header="Время" Binding="{Binding Time, StringFormat=F2}" Width="90" />
+                        <DataGridTextColumn Header="dc [0..1]" Width="90" EditingElementStyle="{StaticResource ValidatingTextBoxStyle}">
+                            <DataGridTextColumn.Binding>
+                                <Binding Path="Dc" StringFormat="F2" ValidatesOnExceptions="True" NotifyOnValidationError="True">
+                                    <Binding.ValidationRules>
+                                        <local:RangeValidationRule Min="0" Max="1" ValidationStep="ConvertedProposedValue" />
+                                    </Binding.ValidationRules>
+                                </Binding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Header="Время [&gt;=0]" Width="90" EditingElementStyle="{StaticResource ValidatingTextBoxStyle}">
+                            <DataGridTextColumn.Binding>
+                                <Binding Path="Time" StringFormat="F2" ValidatesOnExceptions="True" NotifyOnValidationError="True">
+                                    <Binding.ValidationRules>
+                                        <local:RangeValidationRule Min="0" ValidationStep="ConvertedProposedValue" />
+                                    </Binding.ValidationRules>
+                                </Binding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
                     </DataGrid.Columns>
                 </DataGrid>
 

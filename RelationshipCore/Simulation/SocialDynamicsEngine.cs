@@ -112,7 +112,6 @@ public sealed class SocialDynamicsEngine
         // (например, структурное MEMBER слоя O'Connor, Этап 5), untyped GetEdge мог бы вернуть его.
         var current = Graph.GetEdge<SocialRelation>(from, to)?.Relationship as SocialRelation ?? SocialRelation.Neutral;
         var updated = SocialRelationRules.Apply(current, delta);
-        updated = SocialRelationRules.UpdateFamiliarityFromLikingShift(current, updated);
 
         Graph.AddDirectEdge(new Edge(from, to, updated));
     }

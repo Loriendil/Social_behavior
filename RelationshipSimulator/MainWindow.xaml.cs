@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Microsoft.Msagl.WpfGraphControl;
 using OxyPlot;
 using OxyPlot.Axes;
@@ -39,6 +40,10 @@ public partial class MainWindow : Window
 
     public ObservableCollection<EventRow> Events { get; } = new();
 
+    public ObservableCollection<AttitudeRow> Attitudes { get; } = new();
+
+    public ObservableCollection<PraiseRow> Praises { get; } = new();
+
     public MainWindow()
     {
         _engine = new SocialDynamicsEngine(_graph, _actions);
@@ -63,10 +68,70 @@ public partial class MainWindow : Window
 
     private void AddEvent_Click(object sender, RoutedEventArgs e) => Events.Add(new EventRow());
 
+    /// <summary>
+    /// WPF DataGrid держит незавершённое редактирование строки открытым, пока пользователь не
+    /// перейдёт на другую строку/элемент управления В ТОЙ ЖЕ вкладке (это вызывает CommitEdit).
+    /// Переключение TabItem само по себе НЕ гарантирует commit — обнаружено вручную: если
+    /// отредактировать 2+ ячейки одной строки (например, TargetEntityId и Attitude) и сразу
+    /// переключиться на другую вкладку, WPF может отменить (CancelEdit), а не зафиксировать
+    /// последнее изменение. Форсируем commit на всех гридах при каждом переключении вкладки.
+    /// </summary>
+    private void MainTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+    }
+
+    private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+    }
+
+    /// <summary>
+    /// AttitudeRow/PraiseRow имеют "перекрёстные" ячейки: Attitude/Praise читают значение по
+    /// ключу, собранному из OwnerId+TargetEntityId (или OwnerId+ActionId) ДРУГИХ ячеек той же
+    /// строки. Обнаружено вручную (см. TASK_fixes_round1.md, задача 1): если отредактировать
+    /// TargetEntityId, а затем сразу Attitude на той же строке и уйти со вкладки, WPF DataGrid
+    /// может не закрыть транзакцию редактирования строки полностью, и второе значение теряется
+    /// (не долетает до модели) — воспроизводится и настоящим кликом мыши, это не баг автоматизации.
+    /// Форсируем CommitEdit строки сразу после КАЖДОЙ ячейки (не дожидаясь ухода со строки/вкладки).
+    /// Dispatcher.BeginInvoke — чтобы не вызывать CommitEdit реентрантно изнутри CellEditEnding.
+    /// </summary>
+    private void CrossFieldGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+    {
+        if (e.EditAction != DataGridEditAction.Commit)
+        {
+            return;
+        }
+
+        var grid = (DataGrid)sender;
+        Dispatcher.BeginInvoke(new Action(() => grid.CommitEdit(DataGridEditingUnit.Row, true)));
+    }
+
+    private void CommitAllGridEdits()
+    {
+        foreach (var grid in new[] { NpcGrid, ActionGrid, AttitudeGrid, PraiseGrid, EventGrid })
+        {
+            grid.CommitEdit(DataGridEditingUnit.Cell, true);
+            grid.CommitEdit(DataGridEditingUnit.Row, true);
+        }
+    }
+
+    private void AddAttitude_Click(object sender, RoutedEventArgs e)
+    {
+        int ownerId = Npcs.Count > 0 ? Npcs[0].EntityId : 0;
+        Attitudes.Add(new AttitudeRow(_engine, ownerId, ownerId));
+    }
+
+    private void AddPraise_Click(object sender, RoutedEventArgs e)
+    {
+        int ownerId = Npcs.Count > 0 ? Npcs[0].EntityId : 0;
+        int actionId = Actions.Count > 0 ? Actions[0].ActionId : 0;
+        Praises.Add(new PraiseRow(_engine, ownerId, actionId));
+    }
+
     private void RunScenario_Click(object sender, RoutedEventArgs e)
     {
         try
         {
+            CommitAllGridEdits();
             _emotionSamples.Clear();
             foreach (var row in Events.OrderBy(r => r.Time))
             {

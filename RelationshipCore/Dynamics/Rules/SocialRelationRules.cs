@@ -58,7 +58,13 @@ public static class SocialRelationRules
         return new SocialRelationDelta(liking: solidarityDelta, solidarity: solidarityDelta);
     }
 
-    /// <summary>g_sr: применяет накопленную (сложенную из нескольких источников) дельту к текущему отношению.</summary>
+    /// <summary>
+    /// g_sr: применяет накопленную (сложенную из нескольких источников) дельту к текущему отношению.
+    /// Familiarity сюда сознательно не входит (см. «Осознанные трактовки статьи Ochs» в CLAUDE.md,
+    /// раздел IV-D статьи vs. III-D): эмоции на неё не влияют вообще, ни прямо, ни косвенно через
+    /// liking — единственный канал изменения familiarity в этой модели — явная передача информации,
+    /// см. <see cref="FamiliarityFromInformationTransfer"/>.
+    /// </summary>
     public static SocialRelation Apply(SocialRelation current, SocialRelationDelta delta, float gain = DefaultGain) => new(
         liking: ApplyBoundedSigned(current.Liking, delta.Liking * gain),
         dominance: ApplyBoundedSigned(current.Dominance, delta.Dominance * gain),
@@ -66,19 +72,23 @@ public static class SocialRelationRules
         solidarity: ApplyBoundedUnit(current.Solidarity, delta.Solidarity * gain));
 
     /// <summary>
-    /// Familiarity явно не входит в f_sr/g_sr статьи ("механизм... не представлен в этой работе") —
-    /// растёт косвенно вместе с изменением liking; отдельный шаг после Apply.
+    /// Явная точка расширения (пока не подключена к SocialDynamicsEngine): рост familiarity от
+    /// передачи информации (раздел III-D статьи — единственный признанный статьёй канал изменения
+    /// familiarity; сама статья говорит, что этот механизм "не представлен в этой работе", поэтому
+    /// конкретная формула — расширение, не цитата). confidentiality ∈ [0,1] — насколько значимой
+    /// была раскрытая информация; рост монотонный и пологий у краёв, как и остальные g_sr-функции.
     /// </summary>
-    public static SocialRelation UpdateFamiliarityFromLikingShift(
-        SocialRelation before, SocialRelation after, float gain = DefaultGain)
+    public static SocialRelation FamiliarityFromInformationTransfer(
+        SocialRelation current, float confidentiality, float gain = DefaultGain)
     {
-        float familiarityDelta = MathF.Abs(after.Liking - before.Liking) * gain;
+        float clampedConfidentiality = Math.Clamp(confidentiality, 0f, 1f);
+        float updatedFamiliarity = ApplyBoundedUnit(current.Familiarity, clampedConfidentiality * gain);
 
         return new SocialRelation(
-            liking: after.Liking,
-            dominance: after.Dominance,
-            familiarity: ApplyBoundedUnit(after.Familiarity, familiarityDelta),
-            solidarity: after.Solidarity);
+            liking: current.Liking,
+            dominance: current.Dominance,
+            familiarity: updatedFamiliarity,
+            solidarity: current.Solidarity);
     }
 
     /// <summary>

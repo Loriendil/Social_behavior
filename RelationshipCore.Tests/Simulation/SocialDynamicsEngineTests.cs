@@ -229,6 +229,107 @@ public class SocialDynamicsEngineTests
         Assert.Equal(historyEdge.Relationship, graph.GetEdge<SocialRelation>(burglarNode, policemanNode)!.Relationship);
     }
 
+    [Theory]
+    [InlineData(0.6f, EmotionKind.Joy)]
+    [InlineData(-0.6f, EmotionKind.Distress)]
+    public void Perceive_AttitudeTowardArbitraryPatient_TriggersJoyOrDistressFamily(float attitudeTowardPatient, EmotionKind expectedKind)
+    {
+        // Задача 1: attitude воспринимающего к ПАЦИЕНТУ события (не к себе) должно доходить до
+        // движка через Appraisal-словарь — раньше UI умел задавать только attitude к себе, из-за
+        // чего события с patientId != perceiverId никогда не триггерили эмоций.
+        const int perceiverId = 1;
+        const int agentId = 2;
+        const int patientId = 3;
+        var action = new ActionId(1);
+
+        var engine = CreateEngine(out var graph, out var actions);
+        actions.SetEffect(action, 0.7f);
+
+        var perceiver = engine.RegisterNpc(perceiverId);
+        engine.RegisterNpc(agentId);
+        engine.RegisterNpc(patientId);
+        graph.AddNode(new Node(perceiverId));
+        graph.AddNode(new Node(agentId));
+        graph.AddNode(new Node(patientId));
+
+        perceiver.Appraisal.SetAttitude(patientId, attitudeTowardPatient);
+
+        engine.Perceive(perceiverId, new GameEvent(agentId, action, patientId, dc: 1f), time: 0f);
+
+        Assert.True(perceiver.Emotions[expectedKind] > 0f);
+    }
+
+    [Fact]
+    public void Perceive_NegativePraiseFromOtherAgent_AngerIncreasesDominanceTowardAgent()
+    {
+        // Задача 2: praise субъективен (Appraisal.GetPraise), а не часть ActionDictionary — уже
+        // так реализовано (см. CLAUDE.md, п.4 архитектуры объединения слоёв). Anger (рис. 5,
+        // DominancePositive) поднимает dominance перцевера над агентом действия.
+        var engine = CreateEngine(out var graph, out var actions);
+        var action = new ActionId(5);
+
+        var perceiver = engine.RegisterNpc(1);
+        engine.RegisterNpc(2);
+        graph.AddNode(new Node(1));
+        graph.AddNode(new Node(2));
+        graph.AddCommonEdge(graph.GetNode(1)!, graph.GetNode(2)!, SocialRelation.Neutral, SocialRelation.Neutral);
+
+        perceiver.Appraisal.SetPraise(action, -0.7f);
+
+        engine.Perceive(1, new GameEvent(agentId: 2, action, patientId: 3, dc: 1f), time: 0f);
+
+        Assert.True(perceiver.Emotions[EmotionKind.Anger] > 0f);
+        var relation = (SocialRelation)graph.GetEdge(graph.GetNode(1)!, graph.GetNode(2)!)!.Relationship;
+        Assert.True(relation.Dominance > 0f);
+    }
+
+    [Fact]
+    public void Perceive_PositivePraiseFromOtherAgent_AdmirationDecreasesDominanceTowardAgent()
+    {
+        var engine = CreateEngine(out var graph, out var actions);
+        var action = new ActionId(5);
+
+        var perceiver = engine.RegisterNpc(1);
+        engine.RegisterNpc(2);
+        graph.AddNode(new Node(1));
+        graph.AddNode(new Node(2));
+        graph.AddCommonEdge(graph.GetNode(1)!, graph.GetNode(2)!, SocialRelation.Neutral, SocialRelation.Neutral);
+
+        perceiver.Appraisal.SetPraise(action, 0.7f);
+
+        engine.Perceive(1, new GameEvent(agentId: 2, action, patientId: 3, dc: 1f), time: 0f);
+
+        Assert.True(perceiver.Emotions[EmotionKind.Admiration] > 0f);
+        var relation = (SocialRelation)graph.GetEdge(graph.GetNode(1)!, graph.GetNode(2)!)!.Relationship;
+        Assert.True(relation.Dominance < 0f);
+    }
+
+    [Fact]
+    public void Perceive_AndObserveExpression_NeverChangeFamiliarity()
+    {
+        // Задача 4: familiarity заморожена — ни Perceive, ни ObserveExpression не должны сдвигать
+        // её ни на сколько, независимо от силы вызванных эмоций.
+        var engine = CreateEngine(out var graph, out var actions);
+        actions.SetEffect(Arrest, -1f);
+
+        var alice = engine.RegisterNpc(1);
+        var bob = engine.RegisterNpc(2);
+        var aliceNode = new Node(1);
+        var bobNode = new Node(2);
+        graph.AddNode(aliceNode);
+        graph.AddNode(bobNode);
+        graph.AddCommonEdge(aliceNode, bobNode, SocialRelation.Neutral, SocialRelation.Neutral);
+
+        alice.Appraisal.SetAttitude(1, 1f);
+        bob.Appraisal.SetAttitude(2, 1f);
+
+        engine.Perceive(1, new GameEvent(agentId: 2, action: Arrest, patientId: 1, dc: 1f), time: 0f);
+        engine.ObserveExpression(1, 2, time: 0f);
+
+        var relation = (SocialRelation)graph.GetEdge(aliceNode, bobNode)!.Relationship;
+        Assert.Equal(0f, relation.Familiarity);
+    }
+
     private static void FloatAssertEqualPersonality(Personality expected, Personality actual)
     {
         Assert.Equal(expected.Extraversion, actual.Extraversion);

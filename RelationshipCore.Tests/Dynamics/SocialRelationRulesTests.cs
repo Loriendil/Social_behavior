@@ -172,18 +172,57 @@ public class SocialRelationRulesTests
         Assert.InRange(updated.Solidarity, 0f, 1f);
     }
 
-    [Fact]
-    public void UpdateFamiliarityFromLikingShift_GrowsRegardlessOfLikingDirection()
+    [Theory]
+    [InlineData(10f, 10f, 10f)]
+    [InlineData(-10f, -10f, -10f)]
+    [InlineData(0f, 0f, 0f)]
+    public void Apply_NeverChangesFamiliarityRegardlessOfDelta(float liking, float dominance, float solidarity)
     {
-        var before = SocialRelation.Neutral;
-        var afterPositive = new SocialRelation(liking: 0.5f, dominance: 0f, familiarity: 0f, solidarity: 0f);
-        var afterNegative = new SocialRelation(liking: -0.5f, dominance: 0f, familiarity: 0f, solidarity: 0f);
+        // Задача 4 (заморозка familiarity): статья противоречит сама себе (раздел III-D говорит,
+        // что эмоции не влияют на familiarity напрямую; раздел IV-A буквально прочитанный —
+        // предполагает обратное). Принятое решение — следовать III-D: ни один источник дельты
+        // (f_sr) не должен сдвигать familiarity, при любой силе emotional delta.
+        var current = new SocialRelation(liking: 0.2f, dominance: -0.1f, familiarity: 0.37f, solidarity: 0.6f);
+        var delta = new SocialRelationDelta(liking, dominance, solidarity);
 
-        var updatedPositive = SocialRelationRules.UpdateFamiliarityFromLikingShift(before, afterPositive);
-        var updatedNegative = SocialRelationRules.UpdateFamiliarityFromLikingShift(before, afterNegative);
+        var updated = SocialRelationRules.Apply(current, delta);
 
-        Assert.True(updatedPositive.Familiarity > 0f);
-        FloatAssert.Approximately(updatedPositive.Familiarity, updatedNegative.Familiarity);
+        FloatAssert.Approximately(current.Familiarity, updated.Familiarity);
+    }
+
+    [Fact]
+    public void FamiliarityFromInformationTransfer_ZeroConfidentiality_LeavesFamiliarityUnchanged()
+    {
+        var current = new SocialRelation(liking: 0f, dominance: 0f, familiarity: 0.4f, solidarity: 0f);
+
+        var updated = SocialRelationRules.FamiliarityFromInformationTransfer(current, confidentiality: 0f);
+
+        FloatAssert.Approximately(current.Familiarity, updated.Familiarity);
+    }
+
+    [Fact]
+    public void FamiliarityFromInformationTransfer_PositiveConfidentiality_GrowsMonotonicallyWithinUnitRange()
+    {
+        var current = SocialRelation.Neutral; // familiarity = 0
+
+        var afterLowConfidentiality = SocialRelationRules.FamiliarityFromInformationTransfer(current, confidentiality: 0.2f);
+        var afterHighConfidentiality = SocialRelationRules.FamiliarityFromInformationTransfer(current, confidentiality: 0.9f);
+
+        Assert.True(afterLowConfidentiality.Familiarity > current.Familiarity);
+        Assert.True(afterHighConfidentiality.Familiarity > afterLowConfidentiality.Familiarity);
+        Assert.InRange(afterHighConfidentiality.Familiarity, 0f, 1f);
+    }
+
+    [Fact]
+    public void FamiliarityFromInformationTransfer_DoesNotAffectOtherDimensions()
+    {
+        var current = new SocialRelation(liking: 0.3f, dominance: -0.2f, familiarity: 0f, solidarity: 0.5f);
+
+        var updated = SocialRelationRules.FamiliarityFromInformationTransfer(current, confidentiality: 1f);
+
+        FloatAssert.Approximately(current.Liking, updated.Liking);
+        FloatAssert.Approximately(current.Dominance, updated.Dominance);
+        FloatAssert.Approximately(current.Solidarity, updated.Solidarity);
     }
 
     [Fact]
