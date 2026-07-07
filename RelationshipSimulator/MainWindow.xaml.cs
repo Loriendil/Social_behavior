@@ -114,10 +114,27 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Задача 3 (раунд правок 2): единственное хранилище attitude — эта таблица (owner==target —
+    /// это attitude "к себе"). Дубли по (OwnerId, TargetEntityId) запрещены при РЕДАКТИРОВАНИИ
+    /// (см. AttitudeRow) — попытка увести строку на уже занятую пару откатывается.
+    /// </summary>
+    private bool AttitudeWouldDuplicate(AttitudeRow row, int ownerId, int targetId) =>
+        Attitudes.Any(r => !ReferenceEquals(r, row) && r.OwnerId == ownerId && r.TargetEntityId == targetId);
+
+    /// <summary>
+    /// Новая строка получает заведомо свободный (никогда не встречавшийся) TargetEntityId —
+    /// иначе фиксированный дефолт (owner=target=Npcs[0]) сталкивался бы сам с собой при втором
+    /// клике "Добавить attitude" до того, как пользователь успеет отредактировать первую строку
+    /// (обнаружено при живой проверке UI, задача 3). Пара с уникальным (заведомо неиспользуемым)
+    /// target не может дублировать ни одну существующую строку, поэтому AttitudeWouldDuplicate
+    /// тут заведомо не сработает.
+    /// </summary>
     private void AddAttitude_Click(object sender, RoutedEventArgs e)
     {
         int ownerId = Npcs.Count > 0 ? Npcs[0].EntityId : 0;
-        Attitudes.Add(new AttitudeRow(_engine, ownerId, ownerId));
+        int placeholderTarget = Attitudes.Count == 0 ? -1 : Math.Min(-1, Attitudes.Min(r => r.TargetEntityId) - 1);
+        Attitudes.Add(new AttitudeRow(_engine, ownerId, placeholderTarget, AttitudeWouldDuplicate));
     }
 
     private void AddPraise_Click(object sender, RoutedEventArgs e)

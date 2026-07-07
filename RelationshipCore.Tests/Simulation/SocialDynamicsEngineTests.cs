@@ -79,6 +79,32 @@ public class SocialDynamicsEngineTests
     }
 
     [Fact]
+    public void Perceive_SelfCausedHarmToThirdParty_DoesNotUpdateRelationTowardVictim()
+    {
+        // Раунд правок 2, задача 1: раньше самопричинённая эмоция (perceiver == agent) откатывалась
+        // на пациента через fallback в counterparty — perceiver, причинивший вред пациенту и
+        // испытавший distress (т.к. attitude к пациенту положительное, а effect действия отрицательный),
+        // ПОНИЖАЛ liking к пациенту — "обвинение жертвы". Правильно: causeId = evt.AgentId = perceiverId,
+        // социальный эффект отбрасывается целиком, ребро perceiver->patient не трогается вообще.
+        var engine = CreateEngine(out var graph, out var actions);
+        actions.SetEffect(Offer, -0.56f);
+
+        var agent = engine.RegisterNpc(1);
+        engine.RegisterNpc(2);
+        var agentNode = new Node(1);
+        var patientNode = new Node(2);
+        graph.AddNode(agentNode);
+        graph.AddNode(patientNode);
+
+        agent.Appraisal.SetAttitude(2, 0.2f); // agent любит пациента, но собственное действие ему вредит
+
+        engine.Perceive(1, new GameEvent(agentId: 1, action: Offer, patientId: 2, dc: 1f), time: 0f);
+
+        Assert.True(agent.Emotions[EmotionKind.Distress] > 0f); // эмоция всё равно возникает
+        Assert.Null(graph.GetEdge<SocialRelation>(agentNode, patientNode)); // но отношение не создаётся/не меняется
+    }
+
+    [Fact]
     public void Perceive_NonMonotonicTime_DoesNotRewindLastUpdateTime()
     {
         // Регрессия: DecayToTime раньше безусловно перезаписывал LastUpdateTime, даже если

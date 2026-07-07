@@ -46,9 +46,15 @@ public sealed class SocialDynamicsEngine
     /// <summary>
     /// Восприятие события perceiverId (раздел IV статьи Ochs): стимул (рис. 2) → модуляция
     /// личностью → слияние с затухшими старыми эмоциями (e(t)=max(триггер, затухшее)) →
-    /// обновление отношения perceiver к "второй стороне" события собственной эмоцией (рис. 4-5,
-    /// FromOwnEmotion). Если perceiver сам — вторая сторона (perceiver == agent == patient),
-    /// отношение не обновляется — обновлять нечего.
+    /// обновление отношения perceiver к причине эмоции собственной эмоцией (рис. 4-6,
+    /// FromOwnEmotion). Причина (causeId) — буквально evt.AgentId, никогда не пациент (раунд
+    /// правок 2, задача 1 — см. «Осознанные трактовки статьи Ochs» в CLAUDE.md). Если
+    /// perceiver сам — причина (perceiver == agent, самопричинённая эмоция), социальный эффект
+    /// отбрасывается целиком: рёбер «к себе» не существует, и никакого fallback на пациента или
+    /// другого участника события нет — раньше именно этот fallback давал «обвинение жертвы»
+    /// (перceiver, причинивший вред пациенту, из-за своего distress понижал liking к пациенту).
+    /// Эмоция при этом всё равно остаётся в EmotionVector perceiver — отбрасывается только её
+    /// вклад в социальное отношение.
     /// </summary>
     public void Perceive(int perceiverId, GameEvent evt, float time)
     {
@@ -60,8 +66,11 @@ public sealed class SocialDynamicsEngine
 
         perceiver.Emotions = DecayRules.Merge(perceiver.Emotions, triggered);
 
-        int counterparty = perceiverId == evt.AgentId ? evt.PatientId : evt.AgentId;
-        UpdateRelation(perceiverId, counterparty, SocialRelationRules.FromOwnEmotion(triggered));
+        int causeId = evt.AgentId;
+        if (causeId != perceiverId)
+        {
+            UpdateRelation(perceiverId, causeId, SocialRelationRules.FromOwnEmotion(triggered));
+        }
     }
 
     /// <summary>
